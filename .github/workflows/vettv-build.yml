@@ -1,0 +1,90 @@
+# DRAFT (local only, M0-9). Not pushed anywhere. Adapted from upstream .github/workflows/build.yml @ 8a5b9300c1.
+# Target: Vet-TV/reactos fork, branches vettv/**. Push only after approval A (M0-10).
+name: VetTV Build
+on:
+  push:
+    branches: ['vettv/**']
+  pull_request:
+    branches: ['vettv/main']
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  build-i386:
+    strategy:
+      matrix:
+        config: [Debug, Release]
+      fail-fast: false
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Get RosBE build specifics
+      id: get_rosbe_spec
+      run: |
+        echo march-sha=$(gcc -march=native -Q --help=target | sha1sum | awk '{print $1}') >> $GITHUB_OUTPUT
+        # Pinned 2026-10-02: RosBE unix_amd64 head and gist revision. Fail loudly if upstream moves.
+        ROSBE_PIN=f94ba214bd0582e7cbd2ef5d0d60cd749a17aa21
+        ROSBE_HEAD=$(git ls-remote https://github.com/zefklop/RosBE.git refs/heads/unix_amd64 | awk '{print $1}')
+        [ "$ROSBE_HEAD" = "$ROSBE_PIN" ] || { echo "::error::RosBE unix_amd64 moved to $ROSBE_HEAD (pinned $ROSBE_PIN); re-review and re-pin"; exit 1; }
+        echo git-sha=$ROSBE_PIN >> $GITHUB_OUTPUT
+        wget https://gist.githubusercontent.com/zefklop/b2d6a0b470c70183e93d5285a03f5899/raw/e583d55a89e7644780719695acb38cc9f7fd4759/build_rosbe_ci.sh
+        echo 'ea42b032fdf9b8b51e993ebe0d1aedc8714f7eff522f4a2fbac7b9aa32a9263c  build_rosbe_ci.sh' | sha256sum -c -
+        sed -i '/gcc-8.4.0\/gcc-8.4.0.tar.xz/c\wget https://ftpmirror.gnu.org/gcc/gcc-8.4.0/gcc-8.4.0.tar.xz || wget -L https://web.archive.org/web/2025if_/https://ftpmirror.gnu.org/gcc/gcc-8.4.0/gcc-8.4.0.tar.xz' ./build_rosbe_ci.sh
+    - name: Get RosBE
+      id: get_rosbe
+      uses: actions/cache@v5
+      with:
+        path: RosBE-CI
+        key: RosBE-CI-${{runner.os}}-${{steps.get_rosbe_spec.outputs.march-sha}}-${{steps.get_rosbe_spec.outputs.git-sha}}-${{hashfiles('./build_rosbe_ci.sh')}}
+    - name: Compile RosBE
+      if: ${{ steps.get_rosbe.outputs.cache-hit != 'true' }}
+      run: chmod +x build_rosbe_ci.sh && ./build_rosbe_ci.sh ${{github.workspace}}/RosBE-CI
+    - run: sudo apt-get install -y ccache
+    - uses: actions/checkout@v6
+      with:
+        path: src
+        fetch-depth: 0
+    - uses: actions/cache@v5
+      with:
+        path: ccache
+        key: ccache-gcc-i386-${{matrix.config}}-${{github.sha}}
+        restore-keys: ccache-gcc-i386-${{matrix.config}}-
+    - name: ccache env
+      run: |
+        echo "CCACHE_BASEDIR=${{github.workspace}}" >> $GITHUB_ENV
+        echo "CCACHE_DIR=${{github.workspace}}/ccache" >> $GITHUB_ENV
+        echo "CCACHE_MAXSIZE=1G" >> $GITHUB_ENV
+        echo "CCACHE_SLOPPINESS=time_macros" >> $GITHUB_ENV
+        echo "CCACHE_COMPILERCHECK=string:${{steps.get_rosbe_spec.outputs.git-sha}}-${{hashfiles('./build_rosbe_ci.sh')}}" >> $GITHUB_ENV
+    - name: Configure
+      run: echo 'cmake -S ${{github.workspace}}/src -B ${{github.workspace}}/build -G Ninja -DCMAKE_TOOLCHAIN_FILE:FILEPATH=toolchain-gcc.cmake -DARCH:STRING=i386 -DCMAKE_BUILD_TYPE=${{matrix.config}} -DDLL_EXPORT_VERSION=0x502 -DENABLE_CCACHE=1' | ${{github.workspace}}/RosBE-CI/RosBE.sh . 0 i386
+    - name: Build
+      run: set -o pipefail && echo 'cmake --build ${{github.workspace}}/build -- -k0' | ${{github.workspace}}/RosBE-CI/RosBE.sh . 0 i386 2>&1 | sed 's|^\.\./src/|${{github.workspace}}/src/|'
+    - name: ISOs (bootcd + bootcdregtest)
+      run: echo 'cmake --build ${{github.workspace}}/build --target bootcd bootcdregtest' | ${{github.workspace}}/RosBE-CI/RosBE.sh . 0 i386
+    - name: Checksums
+      run: cd build && sha256sum bootcd.iso bootcdregtest.iso | tee SHA256SUMS.txt
+    - name: Forbid known Microsoft redistributables in ISO
+      run: |
+        sudo apt-get install -y p7zip-full
+        7z l build/bootcd.iso | tee iso-list.txt
+        ! grep -Ei '(msvcr[0-9]+|msvcp[0-9]+|vcruntime|d3dx9_[0-9]+|mfc[0-9]+)\.dll' iso-list.txt
+    - uses: actions/upload-artifact@v4
+      with:
+        name: vettv-retroos-i386-${{matrix.config}}-${{github.sha}}
+        path: |
+          build/bootcd.iso
+          build/bootcdregtest.iso
+          build/SHA256SUMS.txt
+        retention-days: 14
+
+  downstream-diff:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v6
+      with: { fetch-depth: 0 }
+    - name: Diff size outside modules/vettv (target < 500 lines)
+      run: |
+        git remote add upstream https://github.com/reactos/reactos.git
+        git fetch --no-tags upstream master
+        bash .github/vettv/diff-size.sh upstream/master HEAD 500
