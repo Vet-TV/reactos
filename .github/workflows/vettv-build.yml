@@ -67,8 +67,8 @@ jobs:
     - name: Forbid known Microsoft redistributables in ISO
       run: |
         sudo apt-get install -y p7zip-full
-        7z l build/bootcd.iso | tee iso-list.txt
-        ! grep -Ei '(msvcr[0-9]+|msvcp[0-9]+|vcruntime|d3dx9_[0-9]+|mfc[0-9]+)\.dll' iso-list.txt
+        # Name match fails unless the file's sha256 equals a .dll this run's ninja build produced.
+        echo 'for i in bootcd bootcdregtest; do bash ${{github.workspace}}/src/.github/vettv/forbid-ms.sh ${{github.workspace}}/build/$i.iso ${{github.workspace}}/build || exit 1; done' | ${{github.workspace}}/RosBE-CI/RosBE.sh . 0 i386
     - uses: actions/upload-artifact@v4
       with:
         name: vettv-retroos-i386-${{matrix.config}}-${{github.sha}}
