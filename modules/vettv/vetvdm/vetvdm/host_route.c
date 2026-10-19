@@ -350,6 +350,10 @@ resolve_image(host *st)
         kind = vetvdm_resolve_kind(st->cmd.kind, st->cls, st->image,
                                   have_type, binary_type, &cls);
         st->cls = cls;
+        if (have_type &&
+            (st->cmd.kind == VETVDM_KIND_DOS || st->cmd.kind == VETVDM_KIND_WIN16) &&
+            kind != st->cmd.kind)
+            warn_add(st->warn, sizeof(st->warn), "kind-override");
     }
     st->kind = kind;
 
