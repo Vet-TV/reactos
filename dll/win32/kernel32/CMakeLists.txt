@@ -35,6 +35,7 @@ list(APPEND SOURCE
     client/perfcnt.c
     client/power.c
     client/proc.c
+    client/vettv_vdm.c # VETTV: launch hook, see lanes/build-kernel/specs/LAUNCH-HOOK.md
     client/procansi.c
     client/resntfy.c
     client/session.c
