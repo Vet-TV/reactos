@@ -140,7 +140,15 @@ test_quote_conf_hash_log(void)
     check(has(logline.data, "2026-10-19 04:05:06 pid=42 caller=hook"), "log prefix");
     check(has(logline.data, "program=\"C:\\Games\\DOOM.EXE\""), "log program");
     check(has(logline.data, "exit=7 duration_ms=15"), "log exit");
+    check(has(logline.data, "dosbox=\"-\" wine=\"-\" wine_from=-"), "log layer paths empty");
     check(has(logline.data, "warn=truncated,tail"), "log warn");
+    rec.dosbox = "C:\\VetTV\\dosbox-x\\dosbox-x.exe";
+    rec.wine = "C:\\VetTV\\winevdm\\otvdmw.exe";
+    rec.wine_from = "bundled";
+    vcore_buf_free(&logline);
+    check(vcore_log_format(&rec, &logline) == VETVDM_OK, "log paths");
+    check(has(logline.data, "dosbox=\"C:\\VetTV\\dosbox-x\\dosbox-x.exe\""), "log dosbox");
+    check(has(logline.data, "wine=\"C:\\VetTV\\winevdm\\otvdmw.exe\" wine_from=bundled"), "log wine");
     vcore_buf_free(&logline);
     rec.exit_code = VETVDM_E_NOPROG;
     rec.warn = NULL;

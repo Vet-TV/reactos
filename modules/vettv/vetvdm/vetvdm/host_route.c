@@ -66,15 +66,23 @@ locate_dosbox(const WCHAR *configured, WCHAR *out, DWORD cch, int *found)
 }
 
 /*
- * WineVdmPath, when set, overrides the default. The default is
- * %SystemDrive%\VetTV\winevdm\otvdmw.exe. If that file is missing, the
- * second fallback is %ProgramFiles%\otvdm\otvdmw.exe (then otvdm.exe).
+ * WineVdmPath, when the file exists, wins. A set but missing WineVdmPath
+ * falls back to the bundled %SystemDrive%\VetTV\winevdm\otvdmw.exe before
+ * %ProgramFiles%\otvdm\otvdmw.exe (then otvdm.exe).
  */
 static void
-locate_wine(const WCHAR *configured, const WCHAR *program_files,
-           WCHAR *out, DWORD cch, int *found)
+locate_wine(const WCHAR *configured, const WCHAR *bundled,
+           const WCHAR *program_files,
+           WCHAR *out, DWORD cch, int *found,
+           char *step, unsigned step_cch)
 {
     WCHAR fallback[MAX_PATH];
+    WCHAR picked[MAX_PATH];
+    int configured_ok;
+    int bundled_ok;
+    int same_path;
+    int program_ok = 0;
+    const char *which;
     static const WCHAR *names[] = {
         L"otvdmw.exe",
         L"otvdm.exe"
@@ -82,23 +90,40 @@ locate_wine(const WCHAR *configured, const WCHAR *program_files,
 
     *found = 0;
     out[0] = 0;
-    if (configured && configured[0] && file_exists(configured))
+    fallback[0] = 0;
+    picked[0] = 0;
+    configured_ok = (configured && configured[0] && file_exists(configured));
+    bundled_ok = (bundled && bundled[0] && file_exists(bundled));
+    same_path = (configured && bundled && configured[0] && bundled[0] &&
+                vcore_w_ieq(configured, bundled));
+    if (program_files && program_files[0] &&
+        join_path(fallback, MAX_PATH, program_files, L"otvdm\\otvdmw.exe"))
+        locate_sibling(fallback, names, 2, picked, MAX_PATH, &program_ok);
+    which = vetvdm_wine_lookup_step(configured_ok, bundled_ok, same_path, program_ok);
+    if (step && step_cch)
+        vcore_cstr_copy(step, step_cch, which);
+    if (configured_ok)
     {
         vcore_w_copy(out, cch, configured);
         *found = 1;
         return;
     }
-    fallback[0] = 0;
-    if (program_files && program_files[0])
-        join_path(fallback, MAX_PATH, program_files, L"otvdm\\otvdmw.exe");
-    if (fallback[0])
+    if (bundled_ok && !same_path)
     {
-        locate_sibling(fallback, names, 2, out, cch, found);
-        if (*found)
-            return;
+        vcore_w_copy(out, cch, bundled);
+        *found = 1;
+        return;
+    }
+    if (program_ok)
+    {
+        vcore_w_copy(out, cch, picked);
+        *found = 1;
+        return;
     }
     if (configured && configured[0])
         vcore_w_copy(out, cch, configured);
+    else if (bundled && bundled[0])
+        vcore_w_copy(out, cch, bundled);
 }
 
 static int
@@ -311,14 +336,20 @@ resolve_image(host *st)
         return status;
     }
     st->cls = vetvdm_classify_image(st->header, header_len);
-    kind = vetvdm_kind_for_image(st->cmd.kind, st->cls, st->image);
-    if (kind == VETVDM_KIND_AUTO)
     {
-        if (st->cls == VETVDM_IMG_WIN16)
-            kind = VETVDM_KIND_WIN16;
-        else if (st->cls == VETVDM_IMG_DOS_MZ || st->cls == VETVDM_IMG_DOS_LE ||
-                 st->cls == VETVDM_IMG_DOS_LX)
-            kind = VETVDM_KIND_DOS;
+        DWORD binary_type = 0;
+        int have_type = 0;
+        int cls = st->cls;
+        /* winbase.h: SCS_DOS_BINARY is 1, SCS_WOW_BINARY is 2. */
+        typedef char vetvdm_scs_dos[(SCS_DOS_BINARY == VETVDM_BIN_DOS) ? 1 : -1];
+        typedef char vetvdm_scs_wow[(SCS_WOW_BINARY == VETVDM_BIN_WOW) ? 1 : -1];
+        (void)sizeof(vetvdm_scs_dos);
+        (void)sizeof(vetvdm_scs_wow);
+        if (GetBinaryTypeW(st->image, &binary_type))
+            have_type = 1;
+        kind = vetvdm_resolve_kind(st->cmd.kind, st->cls, st->image,
+                                  have_type, binary_type, &cls);
+        st->cls = cls;
     }
     st->kind = kind;
 
@@ -415,9 +446,16 @@ route_image(host *st)
 void
 locate_layers(host *st)
 {
+    WCHAR bundled[MAX_PATH];
+
+    bundled[0] = 0;
+    if (st->have_roots && st->roots.system_drive[0])
+        join_path(bundled, MAX_PATH, st->roots.system_drive,
+                 L"VetTV\\winevdm\\otvdmw.exe");
     locate_dosbox(st->policy.dosboxx_path, st->dosbox, MAX_PATH, &st->dosbox_ok);
-    locate_wine(st->policy.winevdm_path, st->program_files, st->wine, MAX_PATH,
-               &st->wine_ok);
+    locate_wine(st->policy.winevdm_path, bundled, st->program_files,
+               st->wine, MAX_PATH, &st->wine_ok,
+               st->wine_from, sizeof(st->wine_from));
     vcore_w_copy(st->win31_root, MAX_PATH, st->policy.win31_path);
     st->win31_ok = win31_probe(st->win31_root, st->wincom, 64);
 }

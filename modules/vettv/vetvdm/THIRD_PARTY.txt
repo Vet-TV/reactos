@@ -28,8 +28,8 @@ DOSBox-X 2026.10.01
                file names.
 
 WineVDM 0.8.1
-  default: %SystemDrive%\VetTV\winevdm\otvdmw.exe
-  override: registry WineVdmPath
-  fallback: %ProgramFiles%\otvdm\otvdmw.exe, then otvdm.exe in that directory,
-            used only when the chosen file is missing
+  default:  %SystemDrive%\VetTV\winevdm\otvdmw.exe
+  override: registry WineVdmPath, when that file exists
+  bundled:  the default path again, when WineVdmPath is set but missing
+  fallback: %ProgramFiles%\otvdm\otvdmw.exe, then otvdm.exe in that directory
   note:    ReactOS ships 0.8.1. 0.9.0 is not used.

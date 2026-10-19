@@ -40,6 +40,7 @@ typedef struct host
     WCHAR log_path[MAX_PATH];
     char sha[65];
     char warn[192];
+    char wine_from[16];
     const char *why;
     DWORD file_size;
     DWORD started;

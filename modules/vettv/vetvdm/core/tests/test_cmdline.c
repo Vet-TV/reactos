@@ -179,6 +179,25 @@ test_classify_and_route(void)
     check(vetvdm_kind_for_image(VETVDM_KIND_AUTO, VETVDM_IMG_UNKNOWN, L"C:\\a.com") == VETVDM_KIND_DOS, "com auto");
     check(vetvdm_kind_for_image(VETVDM_KIND_AUTO, VETVDM_IMG_UNKNOWN, L"C:\\a.exe") == VETVDM_KIND_AUTO, "exe unknown stays auto");
     check(vetvdm_kind_for_image(VETVDM_KIND_DOS, VETVDM_IMG_WIN16, L"C:\\a.exe") == VETVDM_KIND_DOS, "explicit dos");
+    cls = VETVDM_IMG_WIN16;
+    check(vetvdm_resolve_kind(VETVDM_KIND_DOS, VETVDM_IMG_WIN16, L"C:\\a.exe",
+                             1, VETVDM_BIN_WOW, &cls) == VETVDM_KIND_WIN16,
+         "wow overrides kind=dos");
+    check(cls == VETVDM_IMG_WIN16, "wow class");
+    cls = VETVDM_IMG_WIN16;
+    check(vetvdm_resolve_kind(VETVDM_KIND_WIN16, VETVDM_IMG_WIN16, L"C:\\a.exe",
+                             1, VETVDM_BIN_DOS, &cls) == VETVDM_KIND_DOS,
+         "borland ne stays dos");
+    check(cls == VETVDM_IMG_DOS_MZ, "borland class");
+    cls = VETVDM_IMG_WIN16;
+    check(vetvdm_resolve_kind(VETVDM_KIND_DOS, VETVDM_IMG_WIN16, L"C:\\a.exe",
+                             0, 0, &cls) == VETVDM_KIND_DOS,
+         "no binary type keeps kind");
+    check(cls == VETVDM_IMG_WIN16, "no binary type keeps class");
+    check(strcmp(vetvdm_wine_lookup_step(0, 1, 0, 1), "bundled") == 0, "wine bundled before pf");
+    check(strcmp(vetvdm_wine_lookup_step(1, 1, 0, 1), "winevdm-path") == 0, "wine configured wins");
+    check(strcmp(vetvdm_wine_lookup_step(0, 1, 1, 1), "programfiles") == 0, "wine same path skips bundled");
+    check(strcmp(vetvdm_wine_lookup_step(0, 0, 0, 0), "missing") == 0, "wine missing");
 
     memset(&in, 0, sizeof(in));
     in.image = VETVDM_IMG_DOS_MZ;

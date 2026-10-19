@@ -87,7 +87,13 @@ vcore_log_format(const vcore_log_rec *rec, vcore_buf *line_out)
         vcore_buf_puts(line_out, " profile=") != VETVDM_OK ||
         add_clean(line_out, rec->profile_id) != VETVDM_OK ||
         vcore_buf_printf(line_out, " exit=%s duration_ms=%lu",
-                        exit_buf, (unsigned long)rec->duration_ms) != VETVDM_OK)
+                        exit_buf, (unsigned long)rec->duration_ms) != VETVDM_OK ||
+        vcore_buf_puts(line_out, " dosbox=\"") != VETVDM_OK ||
+        add_clean(line_out, rec->dosbox) != VETVDM_OK ||
+        vcore_buf_puts(line_out, "\" wine=\"") != VETVDM_OK ||
+        add_clean(line_out, rec->wine) != VETVDM_OK ||
+        vcore_buf_puts(line_out, "\" wine_from=") != VETVDM_OK ||
+        add_clean(line_out, rec->wine_from) != VETVDM_OK)
     {
         vcore_buf_free(line_out);
         return VETVDM_E_INTERNAL;

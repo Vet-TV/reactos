@@ -18,7 +18,7 @@ RosBE or mingw-w64 i686. From this directory, the launcher:
 
 ```
 i686-w64-mingw32-gcc -std=gnu99 -Wall -Wextra -Werror -O2 \
-  -D_WIN32_WINNT=0x0502 -DWINVER=0x0502 -DUNICODE -D_UNICODE \
+  -D_WIN32_WINNT=0x0502 -DWINVER=0x502 -DUNICODE -D_UNICODE \
   -mconsole -municode \
   -I. -Icore -Ivetvdm -Ithird_party \
   -o vetvdm.exe \
@@ -129,7 +129,7 @@ RosBE or mingw-w64 i686, from this directory:
 
 ```
 i686-w64-mingw32-gcc -std=gnu99 -Wall -Wextra -Werror -O2 \
-  -D_WIN32_WINNT=0x0502 -DWINVER=0x0502 -DUNICODE -D_UNICODE \
+  -D_WIN32_WINNT=0x0502 -DWINVER=0x502 -DUNICODE -D_UNICODE \
   -o vetvdm_paths_test.exe vetvdm_paths.c vetvdm_paths_test.c \
   -lshell32 -lkernel32
 ```
@@ -138,6 +138,6 @@ i686-w64-mingw32-gcc -std=gnu99 -Wall -Wextra -Werror -O2 \
 
 - Add `add_subdirectory(vettv/vetvdm)` from `modules/CMakeLists.txt` and install `vetvdm.exe` at `%SystemRoot%\System32\vetvdm.exe`. This folder does not copy anything onto the boot CD.
 - The unit tests are host console programs (`win32cui`). Do not put them on the ISO.
-- Keep `_WIN32_WINNT` at `0x0502`. `vetvdm.exe` imports `kernel32`, `user32`, `advapi32`, and `shell32`.
+- Keep `_WIN32_WINNT` at `0x0502`. Do not define `WINVER` in this CMakeLists; ReactOS already sets `WINVER=0x502`. `vetvdm.exe` imports `kernel32`, `user32`, `advapi32`, and `shell32`.
 - The hook's recursion guard is the image name `vetvdm.exe`. vetvdm does not set `VETTV_VDM_BYPASS`. NTVDM is `CreateProcessW` of the original program, and the child inherits the environment unchanged. WineVDM (`otvdm.exe`) can still re-enter the hook; skipping that image name is a Build & Kernel question.
-- DOSBox-X pin is 2026.10.01. The installer copies `dosbox-x_XPx86_SDL2.exe` onto `dosbox-x.exe`, and vetvdm launches that name with `-exit -nopromptfolder -fastlaunch`. The guest exit code is `config -get errorlevel >V:\ERRORLVL.TXT` in the generated conf. WineVDM's default is `%SystemDrive%\VetTV\winevdm\otvdmw.exe`; registry `WineVdmPath` overrides it, and `%ProgramFiles%\otvdm\otvdmw.exe` (then `otvdm.exe`) is the fallback when the chosen file is missing. See `THIRD_PARTY.txt`. JSON profiles use vendored jsmn (MIT). The log line is the shared `vetvdm.log`.
+- DOSBox-X pin is 2026.10.01. The installer copies `dosbox-x_XPx86_SDL2.exe` onto `dosbox-x.exe`, and vetvdm launches that name with `-exit -nopromptfolder -fastlaunch`. The guest exit code is `config -get errorlevel >V:\ERRORLVL.TXT` in the generated conf. WineVDM's default is `%SystemDrive%\VetTV\winevdm\otvdmw.exe`. A registry `WineVdmPath` that exists is used as given. If that file is missing, the bundled `%SystemDrive%\VetTV\winevdm\otvdmw.exe` is next, then `%ProgramFiles%\otvdm\otvdmw.exe` (and `otvdm.exe` beside it). The shared `vetvdm.log` line records the DOSBox-X path and the WineVDM path with the lookup step (`winevdm-path`, `bundled`, `programfiles`, or `missing`). See `THIRD_PARTY.txt`. JSON profiles use vendored jsmn (MIT).

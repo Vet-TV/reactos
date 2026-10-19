@@ -110,3 +110,42 @@ vetvdm_kind_for_image(int kind, int cls, const WCHAR *path)
         return VETVDM_KIND_DOS;
     return VETVDM_KIND_AUTO;
 }
+
+int
+vetvdm_resolve_kind(int requested, int cls, const WCHAR *path,
+                   int have_type, unsigned long binary_type,
+                   int *out_cls)
+{
+    int kind;
+
+    /*
+     * Windows already classified the file. SCS_WOW_BINARY is a 16-bit
+     * Windows program. SCS_DOS_BINARY on an NE image is a DOS extender
+     * (Borland exetyp 5). Do not parse the NE header here.
+     */
+    if (have_type && binary_type == VETVDM_BIN_WOW)
+    {
+        if (out_cls)
+            *out_cls = VETVDM_IMG_WIN16;
+        return VETVDM_KIND_WIN16;
+    }
+    if (have_type && binary_type == VETVDM_BIN_DOS && cls == VETVDM_IMG_WIN16)
+    {
+        if (out_cls)
+            *out_cls = VETVDM_IMG_DOS_MZ;
+        return VETVDM_KIND_DOS;
+    }
+
+    kind = vetvdm_kind_for_image(requested, cls, path);
+    if (kind == VETVDM_KIND_AUTO)
+    {
+        if (cls == VETVDM_IMG_WIN16)
+            kind = VETVDM_KIND_WIN16;
+        else if (cls == VETVDM_IMG_DOS_MZ || cls == VETVDM_IMG_DOS_LE ||
+                 cls == VETVDM_IMG_DOS_LX)
+            kind = VETVDM_KIND_DOS;
+    }
+    if (out_cls)
+        *out_cls = cls;
+    return kind;
+}

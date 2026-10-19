@@ -60,7 +60,7 @@ typedef enum vetvdm_path_kind
 
 typedef struct vetvdm_path_roots
 {
-    WCHAR system_drive[4];         /* L"C:" — letter, colon, NUL */
+    WCHAR system_drive[4];         /* L"C:" - letter, colon, NUL */
     WCHAR local_appdata[MAX_PATH]; /* no trailing slash; ignored unless ok */
     BOOL local_appdata_ok;
     WCHAR exe_dir[MAX_PATH];       /* directory of the host exe, no trailing slash */

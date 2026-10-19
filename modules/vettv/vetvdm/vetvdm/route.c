@@ -143,6 +143,19 @@ vetvdm_decide_route(const vetvdm_route_input *in, vetvdm_route_result *out)
     return VETVDM_OK;
 }
 
+const char *
+vetvdm_wine_lookup_step(int configured_ok, int bundled_ok,
+                       int same_path, int programfiles_ok)
+{
+    if (configured_ok)
+        return "winevdm-path";
+    if (bundled_ok && !same_path)
+        return "bundled";
+    if (programfiles_ok)
+        return "programfiles";
+    return "missing";
+}
+
 int
 vetvdm_layer_for_launch(int desired, int forced,
                        int dosbox_ok, int wine_ok, int win31_ok,

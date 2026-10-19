@@ -50,4 +50,13 @@ int vetvdm_layer_for_launch(int desired, int forced,
                            int dosbox_ok, int wine_ok, int win31_ok,
                            DWORD *error);
 
+/*
+ * WineVDM lookup order once existence is known:
+ * winevdm-path, then the bundled VetTV copy when it is a different file,
+ * then Program Files. same_path is 1 when the configured path and the
+ * bundled path are the same string.
+ */
+const char *vetvdm_wine_lookup_step(int configured_ok, int bundled_ok,
+                                   int same_path, int programfiles_ok);
+
 #endif /* VETVDM_ROUTE_H */

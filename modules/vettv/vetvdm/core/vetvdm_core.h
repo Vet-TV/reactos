@@ -226,6 +226,9 @@ typedef struct vcore_log_rec
     const char *profile_id;
     DWORD exit_code;
     DWORD duration_ms;
+    const char *dosbox;
+    const char *wine;
+    const char *wine_from;
     const char *warn;
 } vcore_log_rec;
 

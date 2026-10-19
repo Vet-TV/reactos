@@ -35,8 +35,9 @@ typedef int BOOL;
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0502
 #endif
+/* ReactOS supplies -DWINVER=0x502. This is only a fallback. */
 #ifndef WINVER
-#define WINVER 0x0502
+#define WINVER 0x502
 #endif
 #ifndef _WIN32_IE
 #define _WIN32_IE 0x0501
