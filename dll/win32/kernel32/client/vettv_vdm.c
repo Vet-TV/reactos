@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* VETTV: dll/win32/kernel32/client/vettv_vdm.c — DOS/Win16 CreateProcess goes to System32\vetvdm.exe. */
+/* VETTV: dll/win32/kernel32/client/vettv_vdm.c - DOS/Win16 CreateProcess goes to System32\vetvdm.exe. */
 #include <k32.h>
 #define NDEBUG
 #include <debug.h>
@@ -30,13 +30,16 @@ VetTvHookEnabled(VOID)
 }
 
 static BOOLEAN
-VetTvCallerIsVetVdm(VOID)
+VetTvCallerIsVetVdm(IN LPCWSTR Kind)
 {
     static const PCWSTR Names[] = { L"vetvdm.exe", L"otvdm.exe", L"otvdmw.exe" };
     PUNICODE_STRING Image;
     UNICODE_STRING Leaf, Name;
     USHORT Chars, Index, Which;
-    /* VETTV: loop guard. vetvdm.exe, otvdm.exe, and otvdmw.exe reach the real VDM. */
+    BOOLEAN IsWin16 = (Kind && *Kind == L'w') ? TRUE : FALSE;
+    /* VETTV: vetvdm.exe always skips; otvdm.exe and otvdmw.exe skip only for Win16. */
+    /* VETTV: DOS from WineVDM goes to vetvdm then DOSBox-X (Win32, hook ignores it). */
+    /* VETTV: If DOSBox-X is missing, vetvdm starts NTVDM, covered by the vetvdm.exe skip. */
     if (!NtCurrentPeb()->ProcessParameters) return FALSE;
     Image = &NtCurrentPeb()->ProcessParameters->ImagePathName;
     if (!Image->Buffer || !Image->Length) return FALSE;
@@ -46,7 +49,7 @@ VetTvCallerIsVetVdm(VOID)
             break;
     Leaf.Buffer = &Image->Buffer[Index];
     Leaf.Length = Leaf.MaximumLength = (USHORT)((Chars - Index) * sizeof(WCHAR));
-    for (Which = 0; Which < RTL_NUMBER_OF(Names); Which++)
+    for (Which = 0; Which < (IsWin16 ? 3 : 1); Which++)
     {
         RtlInitUnicodeString(&Name, Names[Which]);
         if (RtlEqualUnicodeString(&Leaf, &Name, TRUE)) return TRUE;
@@ -74,7 +77,7 @@ VetTvRedirectToVdm(IN LPCWSTR ImagePath, IN LPCWSTR CommandLine,
     PWCHAR Buffer, Dest;
     *NewCmdLine = NULL;
     /* VETTV: fail open onto stock behavior. Never fail the launch from here. */
-    if (!VetTvHookEnabled() || VetTvCallerIsVetVdm() || !ImagePath || !*ImagePath ||
+    if (!VetTvHookEnabled() || VetTvCallerIsVetVdm(Kind) || !ImagePath || !*ImagePath ||
         !Kind || !*Kind)
         return FALSE;
     /* VETTV: %SystemRoot%\System32\vetvdm.exe via SharedUserData. No profile expansion. */
@@ -109,7 +112,10 @@ VetTvRedirectToVdm(IN LPCWSTR ImagePath, IN LPCWSTR CommandLine,
     *Dest = UNICODE_NULL;
     /* VETTV: size mismatch means the command line is wrong; free it and fail open. */
     if ((SIZE_T)(Dest - Buffer) + 1 != Total)
-        return RtlFreeHeap(RtlGetProcessHeap(), 0, Buffer), FALSE;
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Buffer);
+        return FALSE;
+    }
     *NewCmdLine = Buffer;
     return TRUE;
 }
