@@ -1,0 +1,5 @@
+{
+  "id": "castlekey",
+  "layer": "ntvdm",
+  "dosbox": { "machine": "vgaonly", "fullscreen": false }
+}

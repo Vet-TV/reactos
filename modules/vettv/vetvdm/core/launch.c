@@ -15,111 +15,19 @@
  * CreateProcessW is CREATE_SUSPENDED so AssignProcessToJobObject runs
  * before the child can spawn. Closing the job kills DOSBox-X and its
  * children (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE).
+ *
+ * The child inherits this process environment unchanged. NTVDM is
+ * CreateProcessW(image, tail) from vetvdm itself. The launch hook skips
+ * any caller whose image name is vetvdm.exe, so no bypass variable is set.
  */
 
 #include "win32.h"
 
 #include <string.h>
 
-static const WCHAR g_bypass_name[] = L"VETTV_VDM_BYPASS";
-
-WCHAR *
-vcore_env_with_bypass(void)
-{
-    WCHAR *cur = GetEnvironmentStringsW();
-    DWORD bytes = 0;
-    const WCHAR *cursor;
-    WCHAR *block;
-    WCHAR *dest;
-    int replaced = 0;
-
-    if (cur)
-    {
-        cursor = cur;
-        while (*cursor)
-        {
-            DWORD n = 0;
-            while (cursor[n])
-                n++;
-            bytes += (n + 1) * sizeof(WCHAR);
-            cursor += n + 1;
-        }
-    }
-    bytes += (DWORD)(sizeof(g_bypass_name) + sizeof(L"=1"));
-    bytes += sizeof(WCHAR) * 2;
-    block = (WCHAR *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, bytes);
-    if (!block)
-    {
-        if (cur)
-            FreeEnvironmentStringsW(cur);
-        return NULL;
-    }
-    dest = block;
-    if (cur)
-    {
-        cursor = cur;
-        while (*cursor)
-        {
-            const WCHAR *eq = cursor;
-            DWORD n = 0;
-            int skip = 0;
-            while (eq[n] && eq[n] != L'=')
-                n++;
-            if (n == (sizeof(g_bypass_name) / sizeof(WCHAR)) - 1)
-            {
-                DWORD i;
-                skip = 1;
-                for (i = 0; i < n; i++)
-                {
-                    WCHAR a = eq[i];
-                    WCHAR b = g_bypass_name[i];
-                    if (a >= L'a' && a <= L'z')
-                        a = (WCHAR)(a - L'a' + L'A');
-                    if (a != b)
-                    {
-                        skip = 0;
-                        break;
-                    }
-                }
-            }
-            while (cursor[n])
-                n++;
-            if (!skip)
-            {
-                DWORD i;
-                for (i = 0; i < n; i++)
-                    dest[i] = cursor[i];
-                dest[n] = 0;
-                dest += n + 1;
-            }
-            else
-                replaced = 1;
-            cursor += n + 1;
-        }
-    }
-    {
-        const WCHAR *src = L"VETTV_VDM_BYPASS=1";
-        while (*src)
-            *dest++ = *src++;
-        *dest++ = 0;
-    }
-    *dest = 0;
-    (void)replaced;
-    if (cur)
-        FreeEnvironmentStringsW(cur);
-    return block;
-}
-
-void
-vcore_env_free(WCHAR *env)
-{
-    if (env)
-        HeapFree(GetProcessHeap(), 0, env);
-}
-
 DWORD
 vcore_launch_in_job(const WCHAR *app, WCHAR *cmdline, const WCHAR *cwd,
-                   WCHAR *env, vcore_job *out)
+                   vcore_job *out)
 {
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION info;
     STARTUPINFOW si;
@@ -150,9 +58,7 @@ vcore_launch_in_job(const WCHAR *app, WCHAR *cmdline, const WCHAR *cwd,
     si.cb = sizeof(si);
     memset(&pi, 0, sizeof(pi));
     flags = CREATE_SUSPENDED;
-    if (env)
-        flags |= CREATE_UNICODE_ENVIRONMENT;
-    if (!CreateProcessW(app, cmdline, NULL, NULL, FALSE, flags, env,
+    if (!CreateProcessW(app, cmdline, NULL, NULL, FALSE, flags, NULL,
                        (cwd && cwd[0]) ? cwd : NULL, &si, &pi))
     {
         CloseHandle(out->job);

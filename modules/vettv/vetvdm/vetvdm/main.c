@@ -192,7 +192,7 @@ full_path(const WCHAR *in, WCHAR *out, DWORD cch)
 }
 
 static int
-console_attach(void)
+console_attach(int alloc_ok)
 {
     HANDLE out;
     if (g_console)
@@ -205,7 +205,8 @@ console_attach(void)
             g_console = 1;
             return 1;
         }
-        return 0;
+        if (!alloc_ok || !AllocConsole())
+            return 0;
     }
     out = CreateFileW(L"CONOUT$", GENERIC_WRITE,
                      FILE_SHARE_READ | FILE_SHARE_WRITE,
@@ -255,23 +256,15 @@ static void
 show_error(int from_hook, DWORD code, const char *why)
 {
     char line[320];
-    WCHAR wide[320];
-    unsigned i;
 
     if (code < 0xE0000000u)
         return;
     _snprintf(line, sizeof(line), "vetvdm: %s (0x%08lX)\n",
              why ? why : "error", (unsigned long)code);
     line[sizeof(line) - 1] = 0;
-    if (console_attach())
+    /* user32 stays in ask.c. A launcher with no console gets one here. */
+    if (console_attach(from_hook ? 0 : 1))
         console_write(line);
-    else if (!from_hook)
-    {
-        for (i = 0; line[i] && i + 1 < 320; i++)
-            wide[i] = (WCHAR)(unsigned char)line[i];
-        wide[i] = 0;
-        MessageBoxW(NULL, wide, L"vetvdm", MB_OK | MB_ICONERROR);
-    }
 }
 
 static const char *
@@ -341,7 +334,6 @@ typedef struct host
     int skip_log;
     int dry_ran;
     unsigned char *header;
-    WCHAR *env;
 } host;
 
 static int
@@ -389,16 +381,56 @@ locate_sibling(const WCHAR *configured, const WCHAR *const *names,
     }
 }
 
+/*
+ * deps.lock pins DOSBox-X 2026.10.01. The XP payload names are
+ * dosbox-x_XPx86_SDL2.exe then dosbox-x_XPx86_SDL1.exe. The spec default
+ * path is still dosbox-x.exe, so that filename (or an empty name) selects
+ * the pinned siblings in the same directory. Any other DosBoxXPath filename
+ * is a user override and is tried first.
+ */
 static void
 locate_dosbox(const WCHAR *configured, WCHAR *out, DWORD cch, int *found)
 {
-    static const WCHAR *names[] = {
+    static const WCHAR *pinned[] = {
         L"dosbox-x_XPx86_SDL2.exe",
-        L"dosbox-x_XPx86_SDL1.exe"
+        L"dosbox-x_XPx86_SDL1.exe",
+        L"dosbox-x.exe"
     };
-    locate_sibling(configured, names, 2, out, cch, found);
+    WCHAR base[MAX_PATH];
+    int custom;
+    int i;
+
+    *found = 0;
+    out[0] = 0;
+    if (!configured || !configured[0])
+        return;
+    file_part(configured, base, MAX_PATH);
+    custom = !vcore_w_ieq(base, L"dosbox-x.exe");
+    if (custom && file_exists(configured))
+    {
+        vcore_w_copy(out, cch, configured);
+        *found = 1;
+        return;
+    }
+    for (i = 0; i < 3; i++)
+    {
+        WCHAR sibling[MAX_PATH];
+        if (!replace_file(configured, pinned[i], sibling, MAX_PATH))
+            continue;
+        if (!out[0] && !custom)
+            vcore_w_copy(out, cch, sibling);
+        if (file_exists(sibling))
+        {
+            vcore_w_copy(out, cch, sibling);
+            *found = 1;
+            return;
+        }
+    }
+    if (!out[0])
+        vcore_w_copy(out, cch, configured);
 }
 
+/* WineVDM pin is 0.8.1 at %ProgramFiles%\otvdm\otvdmw.exe, then otvdm.exe. */
 static void
 locate_wine(const WCHAR *configured, WCHAR *out, DWORD cch, int *found)
 {
@@ -1146,14 +1178,7 @@ launch_layer(host *st, int layer, WCHAR *command, DWORD *exit_code)
         return VETVDM_E_INTERNAL;
     if (!app || !app[0] || !command)
         return VETVDM_E_NOLAYER;
-    if (!st->env)
-    {
-        st->env = vcore_env_with_bypass();
-        if (!st->env)
-            warn_add(st->warn, sizeof(st->warn), "no-bypass-env");
-    }
-    status = vcore_launch_in_job(app, command, st->cwd[0] ? st->cwd : NULL,
-                               st->env, &job);
+    status = vcore_launch_in_job(app, command, st->cwd[0] ? st->cwd : NULL, &job);
     if (status != VETVDM_OK)
         return status;
     status = vcore_job_wait(&job, exit_code);
@@ -1300,8 +1325,6 @@ cleanup_host(host *st)
     vetvdm_cmdline_free(&st->cmd);
     free(st->header);
     st->header = NULL;
-    vcore_env_free(st->env);
-    st->env = NULL;
 }
 
 static DWORD
@@ -1496,17 +1519,8 @@ emit_dry(host *st, int layer, const char *conf, const WCHAR *command)
     free(cmdline);
     if (status != VETVDM_OK)
         return status;
-    if (console_attach())
+    if (console_attach(1))
         console_write(text.data ? text.data : "");
-    else if (!st->cmd.from_hook)
-    {
-        WCHAR wide[800];
-        if (text.data && vcore_utf8_to_wide(text.data, wide, 800) == VETVDM_OK)
-            MessageBoxW(NULL, wide, L"vetvdm", MB_OK);
-        else
-            MessageBoxW(NULL, L"dry-run output is ready; run it from a console to read it",
-                        L"vetvdm", MB_OK);
-    }
     vcore_buf_free(&text);
     st->dry_ran = 1;
     return VETVDM_OK;
@@ -1664,14 +1678,14 @@ run(void)
     }
     if (st.cmd.help || st.cmd.version)
     {
-        console_attach();
+        console_attach(1);
         console_write(st.cmd.help ? g_help : VETVDM_VERSION_TEXT);
         st.skip_log = 1;
         code = VETVDM_OK;
         goto done;
     }
     if (st.cmd.from_hook)
-        console_attach();
+        console_attach(0);
 
     code = load_policy(&st);
     if (code != VETVDM_OK)

@@ -46,6 +46,7 @@ typedef struct conf_doc
     int nsec;
     char line[LINE_MAX][LINE_LEN];
     int nlines;
+    char result_drive;
     unsigned dropped_autoexec;
     DWORD status;
 } conf_doc;
@@ -508,19 +509,18 @@ build_autoexec(conf_doc *doc, const vcore_conf_input *in)
     else if (in->program_line && in->program_line[0])
         add_line(doc, in->program_line);
 
+    /*
+     * DOSBox-X 2026.10.01 does not expand %ERRORLEVEL% (it is an ordinary
+     * environment variable; issue 2350). The ladder is emitted later, not
+     * stored: `if errorlevel N` means >= N, so the tests run from 255 down.
+     */
     if (in->result_drive && in->result_drive[0])
     {
         char drive = in->result_drive[0];
         if (drive >= 'a' && drive <= 'z')
             drive = (char)(drive - 'a' + 'A');
-        buf[0] = '>';
-        buf[1] = drive;
-        buf[2] = ':';
-        memcpy(buf + 3, "\\ERRORLVL.TXT echo %ERRORLEVEL%", 32);
-        buf[3 + 31] = 0;
-        add_line(doc, buf);
+        doc->result_drive = drive;
     }
-    add_line(doc, "exit");
 }
 
 static const char *g_order[] = {
@@ -567,6 +567,27 @@ emit_section(vcore_buf *out, const conf_section *sec, int *first)
 }
 
 static void
+emit_ladder(vcore_buf *out, char drive)
+{
+    int n;
+
+    if (drive >= 'a' && drive <= 'z')
+        drive = (char)(drive - 'a' + 'A');
+    if (drive < 'A' || drive > 'Z')
+    {
+        vcore_buf_puts(out, "exit\n");
+        return;
+    }
+    for (n = 255; n >= 1; n--)
+        vcore_buf_printf(out, "if errorlevel %d goto e%d\n", n, n);
+    vcore_buf_printf(out, ">%c:\\ERRORLVL.TXT echo 0\ngoto edone\n", drive);
+    for (n = 255; n >= 1; n--)
+        vcore_buf_printf(out, ":e%d\n>%c:\\ERRORLVL.TXT echo %d\ngoto edone\n",
+                        n, drive, n);
+    vcore_buf_puts(out, ":edone\nexit\n");
+}
+
+static void
 emit_doc(const conf_doc *doc, vcore_buf *out)
 {
     int emitted[SEC_MAX];
@@ -609,7 +630,7 @@ emit_doc(const conf_doc *doc, vcore_buf *out)
     for (i = 0; i < nunknown; i++)
         emit_section(out, &doc->sec[unknown[i]], &first);
 
-    if (doc->nlines > 0)
+    if (doc->nlines > 0 || doc->result_drive)
     {
         if (!first)
             vcore_buf_puts(out, "\n");
@@ -619,6 +640,7 @@ emit_doc(const conf_doc *doc, vcore_buf *out)
             vcore_buf_puts(out, doc->line[i]);
             vcore_buf_puts(out, "\n");
         }
+        emit_ladder(out, doc->result_drive);
     }
 }
 

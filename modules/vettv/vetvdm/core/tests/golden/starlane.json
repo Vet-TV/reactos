@@ -1,0 +1,11 @@
+{
+  "id": "starlane",
+  "layer": "dosboxx",
+  "dosbox": {
+    "machine": "tandy", "memsize": 32,
+    "extra": {
+      "sdl": { "mapperfile": "pad.map", "hostkey": "ctrlshift" },
+      "dosbox": { "hostkey": "ctrlshift" }
+    }
+  }
+}

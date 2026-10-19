@@ -364,7 +364,11 @@ test_quote_conf_hash_log(void)
     check(!has(conf.data, "echo leftover"), "template autoexec dropped");
     check(has(conf.data, "DOOM.EXE"), "program line");
     check(has(conf.data, "exit\n"), "exit");
-    check(has(conf.data, ">V:\\ERRORLVL.TXT echo %ERRORLEVEL%"), "errorlevel line");
+    check(has(conf.data, "if errorlevel 255 goto e255"), "ladder top");
+    check(has(conf.data, "if errorlevel 1 goto e1"), "ladder one");
+    check(has(conf.data, ">V:\\ERRORLVL.TXT echo 0\n"), "ladder zero");
+    check(has(conf.data, ":e255\n>V:\\ERRORLVL.TXT echo 255\n"), "ladder 255");
+    check(!has(conf.data, "%ERRORLEVEL%"), "no percent errorlevel");
     check(has(conf.data, "mount C \"C:\\Games\""), "mount");
     check(locks.stripped_mapperfile >= 1, "stripped count");
     dosbox = strstr(conf.data ? conf.data : "", "[dosbox]");
@@ -655,6 +659,170 @@ test_policy_merge(void)
     check(out.n_profile_dirs == 1 && vcore_w_ieq(out.profile_dirs[0], L"C:\\VetTV\\profiles"), "kept default dirs");
 }
 
+static const char *g_starlane =
+    "{\n"
+    "  \"id\": \"starlane\",\n"
+    "  \"layer\": \"dosboxx\",\n"
+    "  \"dosbox\": {\n"
+    "    \"machine\": \"tandy\", \"memsize\": 32,\n"
+    "    \"extra\": {\n"
+    "      \"sdl\": { \"mapperfile\": \"pad.map\", \"hostkey\": \"ctrlshift\" },\n"
+    "      \"dosbox\": { \"hostkey\": \"ctrlshift\" }\n"
+    "    }\n"
+    "  }\n"
+    "}\n";
+
+static const char *g_pixelquest =
+    "{\n"
+    "  \"id\": \"pixelquest\",\n"
+    "  \"layer\": \"dosboxx\",\n"
+    "  \"exe\": \"PIXEL.EXE\",\n"
+    "  \"args\": \"-demo\",\n"
+    "  \"dosbox\": {\n"
+    "    \"cycles\": \"max\", \"sbtype\": \"sb16\",\n"
+    "    \"mounts\": [ { \"drive\": \"C\", \"path\": \".\\\\games\", \"type\": \"dir\" } ],\n"
+    "    \"autoexec\": [ \"PIXEL.EXE %ARGS%\" ]\n"
+    "  }\n"
+    "}\n";
+
+static const char *g_castlekey =
+    "{\n"
+    "  \"id\": \"castlekey\",\n"
+    "  \"layer\": \"ntvdm\",\n"
+    "  \"dosbox\": { \"machine\": \"vgaonly\", \"fullscreen\": false }\n"
+    "}\n";
+
+static int
+read_golden(const char *name, char *buf, unsigned cap)
+{
+    static const char *dirs[] = {
+        "core/tests/golden/",
+        "golden/",
+        NULL
+    };
+    int d;
+    for (d = 0; dirs[d]; d++)
+    {
+        char path[256];
+        FILE *file;
+        unsigned n = 0;
+        size_t got;
+        if (strlen(dirs[d]) + strlen(name) + 1 >= sizeof(path))
+            continue;
+        memcpy(path, dirs[d], strlen(dirs[d]) + 1);
+        memcpy(path + strlen(dirs[d]), name, strlen(name) + 1);
+        file = fopen(path, "rb");
+        if (!file)
+            continue;
+        got = fread(buf, 1, cap - 1, file);
+        n = (unsigned)got;
+        buf[n] = 0;
+        fclose(file);
+        return 1;
+    }
+    return 0;
+}
+
+static void
+cut_ladder(char *text)
+{
+    char *at = strstr(text, "if errorlevel 255 goto e255");
+    if (at)
+        *at = 0;
+}
+
+static void
+test_goldens(void)
+{
+    static const struct
+    {
+        const char *id;
+        const char *json;
+        const char *program;
+        const char *layer;
+        int use_auto;
+    } cases[] = {
+        { "starlane", NULL, "STARLANE.EXE", "dosboxx", 0 },
+        { "pixelquest", NULL, "PIXEL.EXE", "dosboxx", 1 },
+        { "castlekey", NULL, "CASTLE.EXE", "ntvdm", 0 }
+    };
+    const char *jsons[3];
+    int i;
+
+    jsons[0] = g_starlane;
+    jsons[1] = g_pixelquest;
+    jsons[2] = g_castlekey;
+    for (i = 0; i < 3; i++)
+    {
+        vcore_profile prof;
+        vcore_conf_input input;
+        vcore_mount_spec mount;
+        vcore_buf conf;
+        vcore_lock_report locks;
+        vcore_dry_input dry;
+        vcore_buf text;
+        char name[64];
+        char expect[4096];
+        char *prefix;
+
+        expect[0] = 0;
+
+        check(vcore_profile_parse(jsons[i], (DWORD)strlen(jsons[i]), &prof) == VETVDM_OK, cases[i].id);
+        memset(&mount, 0, sizeof(mount));
+        mount.drive = 'C';
+        mount.type = VCORE_MOUNT_DIR;
+        vcore_cstr_copy(mount.path, sizeof(mount.path), "C:\\Games");
+        memset(&input, 0, sizeof(input));
+        input.profile = &prof;
+        input.mounts = &mount;
+        input.n_mounts = 1;
+        input.workdir_drive = "C";
+        input.program_line = cases[i].program;
+        input.args_for_profile = (i == 1) ? "-demo" : "";
+        input.use_profile_autoexec = cases[i].use_auto;
+        input.result_drive = "V";
+        input.logfile = "C:\\temp\\dosbox.log";
+        check(vcore_conf_build(&input, &conf, &locks) == VETVDM_OK, "golden conf");
+        if (i == 0)
+        {
+            check(locks.stripped_mapperfile >= 1, "starlane stripped mapperfile");
+            check(locks.forced_hostkey >= 1, "starlane forced hostkey");
+            check(has(conf.data, "hostkey=mapper"), "starlane hostkey");
+            check(!has(conf.data, "mapperfile"), "starlane no mapperfile");
+            check(!has(conf.data, "ctrlshift"), "starlane no ctrlshift");
+        }
+        memset(&dry, 0, sizeof(dry));
+        dry.layer = cases[i].layer;
+        dry.kind = "dos";
+        dry.caller = "cli";
+        dry.profile_id = cases[i].id;
+        dry.profile_src = "explicit";
+        dry.image = "C:\\Games\\GAME.EXE";
+        dry.sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        dry.cwd = "C:\\Games";
+        dry.cmdline = (i == 2)
+            ? "C:\\Games\\GAME.EXE"
+            : "\"C:\\VetTV\\dosbox-x\\dosbox-x_XPx86_SDL2.exe\" -conf \"C:\\temp\\dosbox-x.conf\" -exit -nopromptfolder -fastlaunch";
+        dry.conf = conf.data;
+        check(vcore_dry_run_text(&dry, &text) == VETVDM_OK, "golden dry");
+        prefix = text.data ? text.data : (char *)"";
+        cut_ladder(prefix);
+        memcpy(name, cases[i].id, strlen(cases[i].id) + 1);
+        memcpy(name + strlen(cases[i].id), ".dry", 5);
+        if (!read_golden(name, expect, sizeof(expect)))
+        {
+            fprintf(stderr, "MISSING %s\n%s\n", name, prefix);
+            check(0, "golden file");
+        }
+        else
+            check(strcmp(expect, prefix) == 0, name);
+        if (expect[0] && strcmp(expect, prefix) != 0)
+            fprintf(stderr, "GOLDEN %s\n--expect--\n%s\n--actual--\n%s\n", name, expect, prefix);
+        vcore_buf_free(&conf);
+        vcore_buf_free(&text);
+    }
+}
+
 static int
 run_tests(void)
 {
@@ -664,6 +832,7 @@ run_tests(void)
     test_quote_conf_hash_log();
     test_profile_and_policy();
     test_policy_merge();
+    test_goldens();
     if (g_failed)
     {
         fprintf(stderr, "%d failed / %d checks\n", g_failed, g_checks);

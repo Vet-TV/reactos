@@ -1,0 +1,11 @@
+{
+  "id": "pixelquest",
+  "layer": "dosboxx",
+  "exe": "PIXEL.EXE",
+  "args": "-demo",
+  "dosbox": {
+    "cycles": "max", "sbtype": "sb16",
+    "mounts": [ { "drive": "C", "path": ".\\games", "type": "dir" } ],
+    "autoexec": [ "PIXEL.EXE %ARGS%" ]
+  }
+}

@@ -1,0 +1,34 @@
+layer=dosboxx
+kind=dos
+caller=cli
+profile=starlane
+profile_src=explicit
+image=C:\Games\GAME.EXE
+sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+cwd=C:\Games
+cmdline="C:\VetTV\dosbox-x\dosbox-x_XPx86_SDL2.exe" -conf "C:\temp\dosbox-x.conf" -exit -nopromptfolder -fastlaunch
+--- conf ---
+[sdl]
+autolock=true
+fullscreen=true
+output=surface
+
+[dosbox]
+hostkey=mapper
+machine=tandy
+memsize=32
+quit warning=false
+
+[cpu]
+cycles=auto
+
+[sblaster]
+sbtype=sb16
+
+[log]
+logfile=C:\temp\dosbox.log
+
+[autoexec]
+mount C "C:\Games"
+C:
+STARLANE.EXE

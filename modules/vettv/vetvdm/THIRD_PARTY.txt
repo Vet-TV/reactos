@@ -1,0 +1,32 @@
+Third-party code under modules/vettv/vetvdm/
+
+jsmn (JSON parser)
+  file:    third_party/jsmn.h
+  version: v1.1.0
+  commit:  fdcef3ebf886fa210d14956d3c068a653e76a24e
+  url:     https://github.com/zserge/jsmn
+  blob:    https://raw.githubusercontent.com/zserge/jsmn/fdcef3ebf886fa210d14956d3c068a653e76a24e/jsmn.h
+  sha256:  1ed6154dedf009212a08a397e9c4ed50a0ce31d5a8301bb294e137ae3188c13b
+  licence: MIT. Copyright (c) 2010 Serge Zaitsev. The full licence text is in jsmn.h.
+           Included once with JSMN_STATIC from core/profile.c.
+
+Not vendored (pins only; do not commit the binaries):
+
+DOSBox-X 2026.10.01
+  repo:        https://github.com/joncampbell123/dosbox-x
+  tag:         dosbox-x-v2026.10.01
+  tag commit:  b6abbd5980a885f5f310a4088c59a8688d1b116c
+  licence:     GPL-2.0-or-later
+  XP zip:      dosbox-x-winXP-2026.10.01-portable.zip
+  zip sha256:  c2c3223d581b10a62438041d205f1e365d271b89d8bfcdd19f89dfb73b4b4467
+  SDL2 exe:    dosbox-x_XPx86_SDL2.exe
+  SDL2 sha256: 2fb2be6330f134b3c243a0acd079a314ef6657035f2c8d987251be7df2c70fad
+  SDL1 exe:    dosbox-x_XPx86_SDL1.exe
+  SDL1 sha256: 6edf379673f7d4f1e7a199fe0e2165e2c13debe57c91d4b8d99bba81694541c5
+  lookup:      when DosBoxXPath's file name is dosbox-x.exe (the spec default),
+               prefer a sibling SDL2 exe, then SDL1, then dosbox-x.exe.
+               Any other file name is used as given.
+
+WineVDM 0.8.1
+  path:    %ProgramFiles%\otvdm\otvdmw.exe, then otvdm.exe in that directory
+  note:    ReactOS ships 0.8.1 (the same path NTVDM already uses). 0.9.0 is not used.

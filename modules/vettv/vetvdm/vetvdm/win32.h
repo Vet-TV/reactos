@@ -38,11 +38,9 @@ typedef struct vcore_job
 } vcore_job;
 
 DWORD vcore_launch_in_job(const WCHAR *app, WCHAR *cmdline, const WCHAR *cwd,
-                         WCHAR *env, vcore_job *out);
+                         vcore_job *out);
 DWORD vcore_job_wait(vcore_job *job, DWORD *exit_code);
 void vcore_job_close(vcore_job *job);
-WCHAR *vcore_env_with_bypass(void);
-void vcore_env_free(WCHAR *env);
 
 DWORD vcore_tempdir_create(WCHAR out[MAX_PATH]);
 DWORD vcore_tempdir_remove(const WCHAR *dir);

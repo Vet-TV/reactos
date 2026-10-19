@@ -1,0 +1,34 @@
+layer=ntvdm
+kind=dos
+caller=cli
+profile=castlekey
+profile_src=explicit
+image=C:\Games\GAME.EXE
+sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+cwd=C:\Games
+cmdline=C:\Games\GAME.EXE
+--- conf ---
+[sdl]
+autolock=true
+fullscreen=false
+output=surface
+
+[dosbox]
+hostkey=mapper
+machine=vgaonly
+memsize=16
+quit warning=false
+
+[cpu]
+cycles=auto
+
+[sblaster]
+sbtype=sb16
+
+[log]
+logfile=C:\temp\dosbox.log
+
+[autoexec]
+mount C "C:\Games"
+C:
+CASTLE.EXE

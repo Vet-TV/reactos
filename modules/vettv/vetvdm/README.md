@@ -17,27 +17,27 @@ The ReactOS build does not compile this directory yet. Build & Kernel adds `add_
 RosBE or mingw-w64 i686. From this directory, the launcher:
 
 ```
-i686-w64-mingw32-gcc -std=c99 -Wall -Wextra -Werror -O2 \
+i686-w64-mingw32-gcc -std=gnu99 -Wall -Wextra -Werror -O2 \
   -D_WIN32_WINNT=0x0502 -DWINVER=0x0502 -DUNICODE -D_UNICODE \
   -mwindows -municode \
-  -I. -Icore -Ivetvdm \
+  -I. -Icore -Ivetvdm -Ithird_party \
   -o vetvdm.exe \
   vetvdm/main.c vetvdm/cmdline.c vetvdm/image.c vetvdm/route.c \
   vetvdm/ask.c vetvdm/image_io.c \
-  core/buf.c core/utf8.c core/sha256.c core/quote.c core/json.c \
+  core/buf.c core/utf8.c core/sha256.c core/quote.c \
   core/policy.c core/profile.c core/conf.c core/dryrun.c core/log.c \
   core/policy_reg.c core/launch.c core/tempdir.c vetvdm_paths.c \
   -lshell32 -luser32 -ladvapi32 -lkernel32
 ```
 
-The unit test (command line, NT paths, MZ/NE/LE/LX/PE routing) also builds as a native program. That build does not run the Win32 host.
+The unit test (command line, NT paths, MZ/NE/LE/LX/PE routing, conf locks, SHA-256, golden dry-run text) also builds as a native program. That build does not run the Win32 host. Run it from this directory so `core/tests/golden/` resolves.
 
 ```
-gcc -std=c99 -Wall -Wextra -Werror -fshort-wchar -DVETVDM_TEST_NATIVE \
-  -I. -Icore -Ivetvdm \
+gcc -std=gnu99 -Wall -Wextra -Werror -fshort-wchar -DVETVDM_TEST_NATIVE \
+  -I. -Icore -Ivetvdm -Ithird_party \
   -o vetvdm_test \
-  vetvdm_test.c vetvdm/cmdline.c vetvdm/image.c vetvdm/route.c \
-  core/buf.c core/utf8.c core/sha256.c core/quote.c core/json.c \
+  core/tests/test_vetvdm.c vetvdm/cmdline.c vetvdm/image.c vetvdm/route.c \
+  core/buf.c core/utf8.c core/sha256.c core/quote.c \
   core/policy.c core/profile.c core/conf.c core/dryrun.c core/log.c
 ```
 
@@ -120,7 +120,7 @@ DWORD vetvdm_path_resolve_os(vetvdm_path_kind kind, const WCHAR *suffix,
 RosBE or mingw-w64 i686, from this directory:
 
 ```
-i686-w64-mingw32-gcc -std=c99 -Wall -Wextra -Werror -O2 \
+i686-w64-mingw32-gcc -std=gnu99 -Wall -Wextra -Werror -O2 \
   -D_WIN32_WINNT=0x0502 -DWINVER=0x0502 -DUNICODE -D_UNICODE \
   -o vetvdm_paths_test.exe vetvdm_paths.c vetvdm_paths_test.c \
   -lshell32 -lkernel32
@@ -131,4 +131,5 @@ i686-w64-mingw32-gcc -std=c99 -Wall -Wextra -Werror -O2 \
 - Add `add_subdirectory(vettv/vetvdm)` from `modules/CMakeLists.txt` and install `vetvdm.exe` at `%SystemRoot%\System32\vetvdm.exe`. This folder does not copy anything onto the boot CD.
 - The unit tests are host console programs (`win32cui`). Do not put them on the ISO.
 - Keep `_WIN32_WINNT` at `0x0502`. `vetvdm.exe` imports `kernel32`, `user32`, `advapi32`, and `shell32`.
-- The hook's recursion guard is the image name `vetvdm.exe`. `VETTV_VDM_BYPASS=1` is set on the child anyway; honoring it (or also skipping `otvdm.exe`) is what stops WineVDM from re-entering the hook.
+- The hook's recursion guard is the image name `vetvdm.exe`. vetvdm does not set `VETTV_VDM_BYPASS`. NTVDM is `CreateProcessW` of the original program, and the child inherits the environment unchanged. WineVDM (`otvdm.exe`) can still re-enter the hook; skipping that image name is a Build & Kernel question.
+- DOSBox-X pin is 2026.10.01: `dosbox-x_XPx86_SDL2.exe`, then `dosbox-x_XPx86_SDL1.exe`, then `dosbox-x.exe`, in the directory of `DosBoxXPath` when that file is named `dosbox-x.exe`. WineVDM pin is 0.8.1 at `%ProgramFiles%\otvdm\otvdmw.exe`. See `THIRD_PARTY.txt`. JSON profiles use vendored jsmn (MIT).
