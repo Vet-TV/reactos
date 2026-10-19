@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* VETTV: PROJECT VetTV Retro OS; FILE dll/win32/kernel32/client/vettv_vdm.c */
-/* VETTV: Redirect DOS and Win16 CreateProcess to System32\vetvdm.exe. GPL-2.0-or-later. */
+/* VETTV: dll/win32/kernel32/client/vettv_vdm.c — DOS/Win16 CreateProcess goes to System32\vetvdm.exe. */
 #include <k32.h>
 #define NDEBUG
 #include <debug.h>
@@ -9,7 +8,6 @@
 static UNICODE_STRING VetTvHookKey =
     RTL_CONSTANT_STRING(L"\\Registry\\Machine\\Software\\VetTV\\RetroOS\\VDM");
 static UNICODE_STRING VetTvHookValue = RTL_CONSTANT_STRING(L"HookEnabled");
-static UNICODE_STRING VetTvImageName = RTL_CONSTANT_STRING(L"vetvdm.exe");
 
 static BOOLEAN
 VetTvHookEnabled(VOID)
@@ -34,21 +32,26 @@ VetTvHookEnabled(VOID)
 static BOOLEAN
 VetTvCallerIsVetVdm(VOID)
 {
+    static const PCWSTR Names[] = { L"vetvdm.exe", L"otvdm.exe", L"otvdmw.exe" };
     PUNICODE_STRING Image;
-    UNICODE_STRING Leaf;
-    USHORT Chars, Index;
-    /* VETTV: loop guard. CreateProcess from vetvdm.exe reaches the real VDM. */
+    UNICODE_STRING Leaf, Name;
+    USHORT Chars, Index, Which;
+    /* VETTV: loop guard. vetvdm.exe, otvdm.exe, and otvdmw.exe reach the real VDM. */
     if (!NtCurrentPeb()->ProcessParameters) return FALSE;
     Image = &NtCurrentPeb()->ProcessParameters->ImagePathName;
-    if (!Image->Buffer || Image->Length < VetTvImageName.Length) return FALSE;
+    if (!Image->Buffer || !Image->Length) return FALSE;
     Chars = (USHORT)(Image->Length / sizeof(WCHAR));
     for (Index = Chars; Index > 0; Index--)
         if (Image->Buffer[Index - 1] == L'\\' || Image->Buffer[Index - 1] == L'/')
             break;
     Leaf.Buffer = &Image->Buffer[Index];
-    Leaf.Length = (USHORT)((Chars - Index) * sizeof(WCHAR));
-    Leaf.MaximumLength = Leaf.Length;
-    return RtlEqualUnicodeString(&Leaf, &VetTvImageName, TRUE);
+    Leaf.Length = Leaf.MaximumLength = (USHORT)((Chars - Index) * sizeof(WCHAR));
+    for (Which = 0; Which < RTL_NUMBER_OF(Names); Which++)
+    {
+        RtlInitUnicodeString(&Name, Names[Which]);
+        if (RtlEqualUnicodeString(&Leaf, &Name, TRUE)) return TRUE;
+    }
+    return FALSE;
 }
 
 static PWCHAR
@@ -106,10 +109,7 @@ VetTvRedirectToVdm(IN LPCWSTR ImagePath, IN LPCWSTR CommandLine,
     *Dest = UNICODE_NULL;
     /* VETTV: size mismatch means the command line is wrong; free it and fail open. */
     if ((SIZE_T)(Dest - Buffer) + 1 != Total)
-    {
-        RtlFreeHeap(RtlGetProcessHeap(), 0, Buffer);
-        return FALSE;
-    }
+        return RtlFreeHeap(RtlGetProcessHeap(), 0, Buffer), FALSE;
     *NewCmdLine = Buffer;
     return TRUE;
 }
