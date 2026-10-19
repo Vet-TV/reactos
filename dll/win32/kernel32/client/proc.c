@@ -50,7 +50,7 @@ RegisterWaitForInputIdle(WaitForInputIdleType lpfnRegisterWaitForInputIdle);
 
 /* VetTV: launch hook, see lanes/build-kernel/specs/LAUNCH-HOOK.md */
 /* VETTV: one-shot Win32 retry; caller env, directory, and startup info stay. */
-BOOLEAN VetTvRedirectToVdm(IN PUNICODE_STRING PathName, IN LPCWSTR CommandLine,
+BOOLEAN VetTvRedirectToVdm(IN LPCWSTR ImagePath, IN LPCWSTR CommandLine,
                            IN LPCWSTR Kind, OUT PWCHAR *NewCmdLine);
 #define VetTvLaunchRetry() do { VetTvHookTried = TRUE; lpCommandLine = VetTvCmdLine; \
     lpApplicationName = NULL; VdmBinaryType = 0; IsWowApp = FALSE; \
@@ -3068,9 +3068,9 @@ StartScan:
             if (!(dwCreationFlags & CREATE_FORCEDOS))
             {
                 /* VetTV: launch hook, see lanes/build-kernel/specs/LAUNCH-HOOK.md */
-                /* VETTV: Win16, before BaseCreateVDMEnvironment. */
+                /* VETTV: Win16. --image is PathBuffer, else lpApplicationName (NameBuffer). */
                 if (!VetTvHookTried &&
-                    VetTvRedirectToVdm(&PathName, lpCommandLine, L"win16", &VetTvCmdLine))
+                    VetTvRedirectToVdm(PathBuffer ? PathBuffer : lpApplicationName, lpCommandLine, L"win16", &VetTvCmdLine))
                 {
                     VetTvLaunchRetry();
                 }
@@ -3224,10 +3224,10 @@ StartScan:
                 VdmBinaryType = BINARY_TYPE_DOS;
 
                 /* VetTV: launch hook, see lanes/build-kernel/specs/LAUNCH-HOOK.md */
-                /* VETTV: DOS only. STATUS_INVALID_IMAGE_NE_FORMAT stays on the stock path. */
+                /* VETTV: DOS only, not NE_FORMAT. --image copied before lpApplicationName = NULL. */
                 if ((Status != STATUS_INVALID_IMAGE_NE_FORMAT) &&
                     !VetTvHookTried &&
-                    VetTvRedirectToVdm(&PathName, lpCommandLine, L"dos", &VetTvCmdLine))
+                    VetTvRedirectToVdm(PathBuffer ? PathBuffer : lpApplicationName, lpCommandLine, L"dos", &VetTvCmdLine))
                 {
                     VetTvLaunchRetry();
                 }

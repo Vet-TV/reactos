@@ -58,7 +58,7 @@ VetTvCopy(PWCHAR Dest, PCWSTR Source, SIZE_T Chars)
     return Dest + Chars;
 }
 BOOLEAN
-VetTvRedirectToVdm(IN PUNICODE_STRING PathName, IN LPCWSTR CommandLine,
+VetTvRedirectToVdm(IN LPCWSTR ImagePath, IN LPCWSTR CommandLine,
                    IN LPCWSTR Kind, OUT PWCHAR *NewCmdLine)
 {
     static const WCHAR Tail[] = L"\\System32\\vetvdm.exe";
@@ -67,12 +67,12 @@ VetTvRedirectToVdm(IN PUNICODE_STRING PathName, IN LPCWSTR CommandLine,
     static const WCHAR Sep[] = L"\" -- ";
     WCHAR VetVdmPath[MAX_PATH];
     PCWSTR Root, Cmd;
-    SIZE_T RootChars, TailChars, KindChars, ImageChars, CmdChars, Total, i;
+    SIZE_T RootChars, TailChars, KindChars, ImageChars, CmdChars, Total;
     PWCHAR Buffer, Dest;
     *NewCmdLine = NULL;
     /* VETTV: fail open onto stock behavior. Never fail the launch from here. */
-    if (!VetTvHookEnabled() || VetTvCallerIsVetVdm() || !PathName || !PathName->Buffer ||
-        PathName->Length < sizeof(WCHAR) || (PathName->Length & 1) || !Kind || !*Kind)
+    if (!VetTvHookEnabled() || VetTvCallerIsVetVdm() || !ImagePath || !*ImagePath ||
+        !Kind || !*Kind)
         return FALSE;
     /* VETTV: %SystemRoot%\System32\vetvdm.exe via SharedUserData. No profile expansion. */
     Root = SharedUserData->NtSystemRoot;
@@ -82,15 +82,15 @@ VetTvRedirectToVdm(IN PUNICODE_STRING PathName, IN LPCWSTR CommandLine,
     VetTvCopy(VetTvCopy(VetVdmPath, Root, RootChars), Tail, TailChars + 1);
     /* VETTV: RtlDoesFileExists_UStr is not exported; U is the same DOS-path check. */
     if (!RtlDoesFileExists_U(VetVdmPath)) return FALSE;
-    ImageChars = PathName->Length / sizeof(WCHAR);
-    for (i = 0; i < ImageChars; i++)
-        if (PathName->Buffer[i] == L'"' || PathName->Buffer[i] == UNICODE_NULL)
+    /* VETTV: a quote fails open. Copy stops at the NUL terminator. */
+    for (ImageChars = 0; ImagePath[ImageChars] != UNICODE_NULL; ImageChars++)
+        if (ImagePath[ImageChars] == L'"')
             return FALSE;
     KindChars = wcslen(Kind);
     Cmd = CommandLine ? CommandLine : L"";
     CmdChars = wcslen(Cmd);
     if (KindChars > 8 || ImageChars > 32767 || CmdChars > 32767) return FALSE;
-    /* VETTV: "<SystemRoot>\System32\vetvdm.exe" --from-hook --kind=dos|win16 --image="<PathName>" -- <cmd> */
+    /* VETTV: "<SystemRoot>\System32\vetvdm.exe" --from-hook --kind=dos|win16 --image="<Win32 path>" -- <cmd> */
     Total = 1 + RootChars + TailChars + (RTL_NUMBER_OF(Mid) - 1) + KindChars +
             (RTL_NUMBER_OF(Img) - 1) + ImageChars + (RTL_NUMBER_OF(Sep) - 1) + CmdChars + 1;
     Buffer = RtlAllocateHeap(RtlGetProcessHeap(), 0, Total * sizeof(WCHAR));
@@ -100,7 +100,7 @@ VetTvRedirectToVdm(IN PUNICODE_STRING PathName, IN LPCWSTR CommandLine,
     Dest = VetTvCopy(Dest, Mid, RTL_NUMBER_OF(Mid) - 1);
     Dest = VetTvCopy(Dest, Kind, KindChars);
     Dest = VetTvCopy(Dest, Img, RTL_NUMBER_OF(Img) - 1);
-    Dest = VetTvCopy(Dest, PathName->Buffer, ImageChars);
+    Dest = VetTvCopy(Dest, ImagePath, ImageChars);
     Dest = VetTvCopy(Dest, Sep, RTL_NUMBER_OF(Sep) - 1);
     Dest = VetTvCopy(Dest, Cmd, CmdChars);
     *Dest = UNICODE_NULL;
