@@ -24,32 +24,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define SEC_MAX 20
-#define KEY_MAX 24
-#define NAME_MAX 32
-#define KEYN_MAX 48
-#define VAL_MAX 800
-#define LINE_MAX 24
-#define LINE_LEN 1024
+#include "conf_int.h"
 
-typedef struct conf_section
-{
-    char name[NAME_MAX];
-    char key[KEY_MAX][KEYN_MAX];
-    char val[KEY_MAX][VAL_MAX];
-    int nkeys;
-} conf_section;
-
-typedef struct conf_doc
-{
-    conf_section sec[SEC_MAX];
-    int nsec;
-    char line[LINE_MAX][LINE_LEN];
-    int nlines;
-    char result_drive;
-    unsigned dropped_autoexec;
-    DWORD status;
-} conf_doc;
 
 static void
 lower_copy(char *dst, unsigned cap, const char *src)
@@ -510,139 +486,26 @@ build_autoexec(conf_doc *doc, const vcore_conf_input *in)
         add_line(doc, in->program_line);
 
     /*
-     * DOSBox-X 2026.10.01 does not expand %ERRORLEVEL% (it is an ordinary
-     * environment variable; issue 2350). The ladder is emitted later, not
-     * stored: `if errorlevel N` means >= N, so the tests run from 255 down.
+     * DOSBox-X 2026.10.01 has no %ERRORLEVEL% variable. `config -get errorlevel`
+     * prints the DOS errorlevel, and the redirect stores it for the host.
      */
     if (in->result_drive && in->result_drive[0])
     {
         char drive = in->result_drive[0];
+        const char *tail = ":\\ERRORLVL.TXT";
+        unsigned i;
         if (drive >= 'a' && drive <= 'z')
             drive = (char)(drive - 'a' + 'A');
-        doc->result_drive = drive;
+        memcpy(buf, "config -get errorlevel >", 24);
+        buf[24] = drive;
+        for (i = 0; tail[i]; i++)
+            buf[25 + i] = tail[i];
+        buf[25 + i] = 0;
+        add_line(doc, buf);
     }
+    add_line(doc, "exit");
 }
 
-static const char *g_order[] = {
-    "sdl", "dosbox", "render", "cpu", "mixer", "midi", "sblaster", "gus",
-    "speaker", "joystick", "serial", "dos", "ipx", "ethernet", "ne2000",
-    "log", "ttf", "keyboard", "capture", "vsync", NULL
-};
-
-static void
-emit_section(vcore_buf *out, const conf_section *sec, int *first)
-{
-    int order[KEY_MAX];
-    int i;
-    int n = sec->nkeys;
-    if (n <= 0)
-        return;
-    for (i = 0; i < n; i++)
-        order[i] = i;
-    for (i = 1; i < n; i++)
-    {
-        int key = order[i];
-        int j = i;
-        while (j > 0 &&
-               vcore_cstr_icmp(sec->key[order[j - 1]], sec->key[key]) > 0)
-        {
-            order[j] = order[j - 1];
-            j--;
-        }
-        order[j] = key;
-    }
-    if (!*first)
-        vcore_buf_puts(out, "\n");
-    *first = 0;
-    vcore_buf_puts(out, "[");
-    vcore_buf_puts(out, sec->name);
-    vcore_buf_puts(out, "]\n");
-    for (i = 0; i < n; i++)
-    {
-        vcore_buf_puts(out, sec->key[order[i]]);
-        vcore_buf_puts(out, "=");
-        vcore_buf_puts(out, sec->val[order[i]]);
-        vcore_buf_puts(out, "\n");
-    }
-}
-
-static void
-emit_ladder(vcore_buf *out, char drive)
-{
-    int n;
-
-    if (drive >= 'a' && drive <= 'z')
-        drive = (char)(drive - 'a' + 'A');
-    if (drive < 'A' || drive > 'Z')
-    {
-        vcore_buf_puts(out, "exit\n");
-        return;
-    }
-    for (n = 255; n >= 1; n--)
-        vcore_buf_printf(out, "if errorlevel %d goto e%d\n", n, n);
-    vcore_buf_printf(out, ">%c:\\ERRORLVL.TXT echo 0\ngoto edone\n", drive);
-    for (n = 255; n >= 1; n--)
-        vcore_buf_printf(out, ":e%d\n>%c:\\ERRORLVL.TXT echo %d\ngoto edone\n",
-                        n, drive, n);
-    vcore_buf_puts(out, ":edone\nexit\n");
-}
-
-static void
-emit_doc(const conf_doc *doc, vcore_buf *out)
-{
-    int emitted[SEC_MAX];
-    int i;
-    int first = 1;
-    int unknown[SEC_MAX];
-    int nunknown = 0;
-
-    for (i = 0; i < doc->nsec; i++)
-        emitted[i] = 0;
-    for (i = 0; g_order[i]; i++)
-    {
-        int s;
-        for (s = 0; s < doc->nsec; s++)
-        {
-            if (!emitted[s] && vcore_cstr_ieq(doc->sec[s].name, g_order[i]))
-            {
-                emit_section(out, &doc->sec[s], &first);
-                emitted[s] = 1;
-            }
-        }
-    }
-    for (i = 0; i < doc->nsec; i++)
-    {
-        if (!emitted[i] && !vcore_cstr_ieq(doc->sec[i].name, "autoexec"))
-            unknown[nunknown++] = i;
-    }
-    for (i = 1; i < nunknown; i++)
-    {
-        int key = unknown[i];
-        int j = i;
-        while (j > 0 &&
-               vcore_cstr_icmp(doc->sec[unknown[j - 1]].name, doc->sec[key].name) > 0)
-        {
-            unknown[j] = unknown[j - 1];
-            j--;
-        }
-        unknown[j] = key;
-    }
-    for (i = 0; i < nunknown; i++)
-        emit_section(out, &doc->sec[unknown[i]], &first);
-
-    if (doc->nlines > 0 || doc->result_drive)
-    {
-        if (!first)
-            vcore_buf_puts(out, "\n");
-        vcore_buf_puts(out, "[autoexec]\n");
-        for (i = 0; i < doc->nlines; i++)
-        {
-            vcore_buf_puts(out, doc->line[i]);
-            vcore_buf_puts(out, "\n");
-        }
-        emit_ladder(out, doc->result_drive);
-    }
-}
 
 const char *
 vcore_locked_defaults(void)

@@ -6,7 +6,7 @@ profile_src=explicit
 image=C:\Games\GAME.EXE
 sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 cwd=C:\Games
-cmdline="C:\VetTV\dosbox-x\dosbox-x_XPx86_SDL2.exe" -conf "C:\temp\dosbox-x.conf" -exit -nopromptfolder -fastlaunch
+cmdline="C:\VetTV\dosbox-x\dosbox-x.exe" -conf "C:\temp\dosbox-x.conf" -exit -nopromptfolder -fastlaunch
 --- conf ---
 [sdl]
 autolock=true

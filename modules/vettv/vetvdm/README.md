@@ -6,7 +6,7 @@
 
 DOS (MZ, LE, LX) goes to DOSBox-X. Win16 (NE) goes to WineVDM (`otvdmw.exe`). Either layer falls back to ReactOS NTVDM by `CreateProcess` of the original program when the chosen executable is missing and the layer was not forced. The game's exit code (0–255, or WineVDM's code as returned) is passed through. vetvdm's own failures use `0xE00000xx`.
 
-The executable is a windows-subsystem program (`win32gui`) so an Explorer launch does not allocate a console. `--from-hook` keeps the caller's console and working directory and shows no UI unless policy says `ask` and a desktop is visible. `--help`, `--version`, and `--dry-run` attach to the parent console when there is one.
+The executable is a console program (`win32cui`). ReactOS cmd waits only for console programs. `--from-hook` keeps the caller's console and working directory. A launch that was not started from the hook, and that owns a fresh console of its own, calls `FreeConsole` before the game so that window does not stay empty. `--help`, `--version`, and `--dry-run` keep the console so their text is visible.
 
 DOSBox-X, WineVDM, Windows 3.1, and games are not in this tree. Paths come from the path library and from `HKLM\Software\VetTV\RetroOS\VDM` (HKCU overrides one value at a time). The log line goes to `<SystemDrive>\VetTV\logs\vetvdm.log`.
 
@@ -19,13 +19,17 @@ RosBE or mingw-w64 i686. From this directory, the launcher:
 ```
 i686-w64-mingw32-gcc -std=gnu99 -Wall -Wextra -Werror -O2 \
   -D_WIN32_WINNT=0x0502 -DWINVER=0x0502 -DUNICODE -D_UNICODE \
-  -mwindows -municode \
+  -mconsole -municode \
   -I. -Icore -Ivetvdm -Ithird_party \
   -o vetvdm.exe \
-  vetvdm/main.c vetvdm/cmdline.c vetvdm/image.c vetvdm/route.c \
-  vetvdm/ask.c vetvdm/image_io.c \
+  vetvdm/main.c vetvdm/hostutil.c vetvdm/host_route.c \
+  vetvdm/host_dosbox.c vetvdm/host_doscmd.c vetvdm/host_wine.c \
+  vetvdm/host_ntvdm.c vetvdm/host_log.c \
+  vetvdm/cmdline.c vetvdm/cmdline_norm.c vetvdm/cmdline_quote.c \
+  vetvdm/image.c vetvdm/route.c vetvdm/ask.c vetvdm/image_io.c \
   core/buf.c core/utf8.c core/sha256.c core/quote.c \
-  core/policy.c core/profile.c core/conf.c core/dryrun.c core/log.c \
+  core/policy.c core/profile.c core/profile_json.c \
+  core/conf.c core/conf_emit.c core/dryrun.c core/log.c \
   core/policy_reg.c core/launch.c core/tempdir.c vetvdm_paths.c \
   -lshell32 -luser32 -ladvapi32 -lkernel32
 ```
@@ -36,9 +40,13 @@ The unit test (command line, NT paths, MZ/NE/LE/LX/PE routing, conf locks, SHA-2
 gcc -std=gnu99 -Wall -Wextra -Werror -fshort-wchar -DVETVDM_TEST_NATIVE \
   -I. -Icore -Ivetvdm -Ithird_party \
   -o vetvdm_test \
-  core/tests/test_vetvdm.c vetvdm/cmdline.c vetvdm/image.c vetvdm/route.c \
+  core/tests/test_vetvdm.c core/tests/test_support.c \
+  core/tests/test_cmdline.c core/tests/test_core.c \
+  vetvdm/cmdline.c vetvdm/cmdline_norm.c vetvdm/cmdline_quote.c \
+  vetvdm/image.c vetvdm/route.c \
   core/buf.c core/utf8.c core/sha256.c core/quote.c \
-  core/policy.c core/profile.c core/conf.c core/dryrun.c core/log.c
+  core/policy.c core/profile.c core/profile_json.c \
+  core/conf.c core/conf_emit.c core/dryrun.c core/log.c
 ```
 
 ## Rules
@@ -132,4 +140,4 @@ i686-w64-mingw32-gcc -std=gnu99 -Wall -Wextra -Werror -O2 \
 - The unit tests are host console programs (`win32cui`). Do not put them on the ISO.
 - Keep `_WIN32_WINNT` at `0x0502`. `vetvdm.exe` imports `kernel32`, `user32`, `advapi32`, and `shell32`.
 - The hook's recursion guard is the image name `vetvdm.exe`. vetvdm does not set `VETTV_VDM_BYPASS`. NTVDM is `CreateProcessW` of the original program, and the child inherits the environment unchanged. WineVDM (`otvdm.exe`) can still re-enter the hook; skipping that image name is a Build & Kernel question.
-- DOSBox-X pin is 2026.10.01: `dosbox-x_XPx86_SDL2.exe`, then `dosbox-x_XPx86_SDL1.exe`, then `dosbox-x.exe`, in the directory of `DosBoxXPath` when that file is named `dosbox-x.exe`. WineVDM pin is 0.8.1 at `%ProgramFiles%\otvdm\otvdmw.exe`. See `THIRD_PARTY.txt`. JSON profiles use vendored jsmn (MIT).
+- DOSBox-X pin is 2026.10.01. The installer copies `dosbox-x_XPx86_SDL2.exe` onto `dosbox-x.exe`, and vetvdm launches that name with `-exit -nopromptfolder -fastlaunch`. The guest exit code is `config -get errorlevel >V:\ERRORLVL.TXT` in the generated conf. WineVDM's default is `%SystemDrive%\VetTV\winevdm\otvdmw.exe`; registry `WineVdmPath` overrides it, and `%ProgramFiles%\otvdm\otvdmw.exe` (then `otvdm.exe`) is the fallback when the chosen file is missing. See `THIRD_PARTY.txt`. JSON profiles use vendored jsmn (MIT). The log line is the shared `vetvdm.log`.

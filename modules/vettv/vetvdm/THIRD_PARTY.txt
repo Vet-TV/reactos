@@ -8,7 +8,7 @@ jsmn (JSON parser)
   blob:    https://raw.githubusercontent.com/zserge/jsmn/fdcef3ebf886fa210d14956d3c068a653e76a24e/jsmn.h
   sha256:  1ed6154dedf009212a08a397e9c4ed50a0ce31d5a8301bb294e137ae3188c13b
   licence: MIT. Copyright (c) 2010 Serge Zaitsev. The full licence text is in jsmn.h.
-           Included once with JSMN_STATIC from core/profile.c.
+           Included once with JSMN_STATIC from core/profile_json.c.
 
 Not vendored (pins only; do not commit the binaries):
 
@@ -23,10 +23,13 @@ DOSBox-X 2026.10.01
   SDL2 sha256: 2fb2be6330f134b3c243a0acd079a314ef6657035f2c8d987251be7df2c70fad
   SDL1 exe:    dosbox-x_XPx86_SDL1.exe
   SDL1 sha256: 6edf379673f7d4f1e7a199fe0e2165e2c13debe57c91d4b8d99bba81694541c5
-  lookup:      when DosBoxXPath's file name is dosbox-x.exe (the spec default),
-               prefer a sibling SDL2 exe, then SDL1, then dosbox-x.exe.
-               Any other file name is used as given.
+  lookup:      launch dosbox-x.exe. The installer copies the pinned SDL2 exe
+               onto that name. vetvdm does not search for the SDL2 or SDL1
+               file names.
 
 WineVDM 0.8.1
-  path:    %ProgramFiles%\otvdm\otvdmw.exe, then otvdm.exe in that directory
-  note:    ReactOS ships 0.8.1 (the same path NTVDM already uses). 0.9.0 is not used.
+  default: %SystemDrive%\VetTV\winevdm\otvdmw.exe
+  override: registry WineVdmPath
+  fallback: %ProgramFiles%\otvdm\otvdmw.exe, then otvdm.exe in that directory,
+            used only when the chosen file is missing
+  note:    ReactOS ships 0.8.1. 0.9.0 is not used.
