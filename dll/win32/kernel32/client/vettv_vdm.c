@@ -62,7 +62,7 @@ VetTvRedirectToVdm(IN PUNICODE_STRING PathName, IN LPCWSTR CommandLine,
                    IN LPCWSTR Kind, OUT PWCHAR *NewCmdLine)
 {
     static const WCHAR Tail[] = L"\\System32\\vetvdm.exe";
-    static const WCHAR Mid[] = L"\" --kind=";
+    static const WCHAR Mid[] = L"\" --from-hook --kind=";
     static const WCHAR Img[] = L" --image=\"";
     static const WCHAR Sep[] = L"\" -- ";
     WCHAR VetVdmPath[MAX_PATH];
@@ -90,7 +90,7 @@ VetTvRedirectToVdm(IN PUNICODE_STRING PathName, IN LPCWSTR CommandLine,
     Cmd = CommandLine ? CommandLine : L"";
     CmdChars = wcslen(Cmd);
     if (KindChars > 8 || ImageChars > 32767 || CmdChars > 32767) return FALSE;
-    /* VETTV: "<SystemRoot>\System32\vetvdm.exe" --kind=dos|win16 --image="<PathName>" -- <cmd> */
+    /* VETTV: "<SystemRoot>\System32\vetvdm.exe" --from-hook --kind=dos|win16 --image="<PathName>" -- <cmd> */
     Total = 1 + RootChars + TailChars + (RTL_NUMBER_OF(Mid) - 1) + KindChars +
             (RTL_NUMBER_OF(Img) - 1) + ImageChars + (RTL_NUMBER_OF(Sep) - 1) + CmdChars + 1;
     Buffer = RtlAllocateHeap(RtlGetProcessHeap(), 0, Total * sizeof(WCHAR));
