@@ -1,5 +1,6 @@
-# DRAFT (local only, M0-9). Not pushed anywhere. Adapted from upstream .github/workflows/build.yml @ 8a5b9300c1.
-# Target: Vet-TV/reactos fork, branches vettv/**. Push only after approval A (M0-10).
+# VetTV i386 ISO workflow. Adapted from upstream .github/workflows/build.yml,
+# including the RosBE bootstrap fallbacks through a2c17cb765 (SourceForge mingw-w64
+# mirror and RosBE.sh existence check). Target: Vet-TV/reactos, branches vettv/**.
 name: VetTV Build
 on:
   push:
@@ -30,6 +31,8 @@ jobs:
         wget https://gist.githubusercontent.com/zefklop/b2d6a0b470c70183e93d5285a03f5899/raw/e583d55a89e7644780719695acb38cc9f7fd4759/build_rosbe_ci.sh
         echo 'ea42b032fdf9b8b51e993ebe0d1aedc8714f7eff522f4a2fbac7b9aa32a9263c  build_rosbe_ci.sh' | sha256sum -c -
         sed -i '/gcc-8.4.0\/gcc-8.4.0.tar.xz/c\wget https://ftpmirror.gnu.org/gcc/gcc-8.4.0/gcc-8.4.0.tar.xz || wget -L https://web.archive.org/web/2025if_/https://ftpmirror.gnu.org/gcc/gcc-8.4.0/gcc-8.4.0.tar.xz' ./build_rosbe_ci.sh
+        # Fallback for SourceForge server problems (upstream build.yml, same pinned gist line).
+        sed -i '/mingw-w64-v6.0.0.tar.bz2\/download/c\wget -O mingw-w64-v6.0.0.tar.bz2 https://sourceforge.net/projects/mingw-w64/files/mingw-w64/mingw-w64-release/mingw-w64-v6.0.0.tar.bz2/download && bzip2 -t mingw-w64-v6.0.0.tar.bz2 || (wget -O - https://github.com/mingw-w64/mingw-w64/archive/refs/tags/v6.0.0.tar.gz | tar -xz && mv mingw-w64-6.0.0 mingw-w64-v6.0.0 && tar -cjf mingw-w64-v6.0.0.tar.bz2 mingw-w64-v6.0.0 && rm -rf mingw-w64-v6.0.0)' ./build_rosbe_ci.sh
     - name: Get RosBE
       id: get_rosbe
       uses: actions/cache@v5
@@ -38,7 +41,10 @@ jobs:
         key: RosBE-CI-${{runner.os}}-${{steps.get_rosbe_spec.outputs.march-sha}}-${{steps.get_rosbe_spec.outputs.git-sha}}-${{hashfiles('./build_rosbe_ci.sh')}}
     - name: Compile RosBE
       if: ${{ steps.get_rosbe.outputs.cache-hit != 'true' }}
-      run: chmod +x build_rosbe_ci.sh && ./build_rosbe_ci.sh ${{github.workspace}}/RosBE-CI
+      run: |
+        chmod +x build_rosbe_ci.sh
+        ./build_rosbe_ci.sh ${{github.workspace}}/RosBE-CI
+        test -x ${{github.workspace}}/RosBE-CI/RosBE.sh || { echo "::error::RosBE build failed. see download/build output a bit up"; exit 1; }
     - run: sudo apt-get install -y ccache
     - uses: actions/checkout@v6
       with:
