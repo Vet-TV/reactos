@@ -1,10 +1,45 @@
 <!-- SPDX-License-Identifier: GPL-2.0-or-later -->
 
-# vetvdm path resolution
+# vetvdm
 
-First piece of `vetvdm.exe` (the wrapper that sends DOS programs to DOSBox-X and Win16 programs to WineVDM). This folder only resolves paths. It does not read policy, parse profiles, generate a DOSBox-X config, or start a process.
+`vetvdm.exe` decides how a DOS or Win16 program runs. The kernel32 hook calls it as `vetvdm.exe --from-hook --kind=dos|win16 --image="<path>" -- <original command line>`. A person or the shell can also launch it without `--from-hook`.
 
-The ReactOS build does not compile this directory yet. Build & Kernel adds it when the rest of `vetvdm.exe` is ready.
+DOS (MZ, LE, LX) goes to DOSBox-X. Win16 (NE) goes to WineVDM (`otvdmw.exe`). Either layer falls back to ReactOS NTVDM by `CreateProcess` of the original program when the chosen executable is missing and the layer was not forced. The game's exit code (0–255, or WineVDM's code as returned) is passed through. vetvdm's own failures use `0xE00000xx`.
+
+The executable is a windows-subsystem program (`win32gui`) so an Explorer launch does not allocate a console. `--from-hook` keeps the caller's console and working directory and shows no UI unless policy says `ask` and a desktop is visible. `--help`, `--version`, and `--dry-run` attach to the parent console when there is one.
+
+DOSBox-X, WineVDM, Windows 3.1, and games are not in this tree. Paths come from the path library and from `HKLM\Software\VetTV\RetroOS\VDM` (HKCU overrides one value at a time). The log line goes to `<SystemDrive>\VetTV\logs\vetvdm.log`.
+
+The ReactOS build does not compile this directory yet. Build & Kernel adds `add_subdirectory(vettv/vetvdm)` from `modules/CMakeLists.txt`.
+
+## Host build
+
+RosBE or mingw-w64 i686. From this directory, the launcher:
+
+```
+i686-w64-mingw32-gcc -std=c99 -Wall -Wextra -Werror -O2 \
+  -D_WIN32_WINNT=0x0502 -DWINVER=0x0502 -DUNICODE -D_UNICODE \
+  -mwindows -municode \
+  -I. -Icore -Ivetvdm \
+  -o vetvdm.exe \
+  vetvdm/main.c vetvdm/cmdline.c vetvdm/image.c vetvdm/route.c \
+  vetvdm/ask.c vetvdm/image_io.c \
+  core/buf.c core/utf8.c core/sha256.c core/quote.c core/json.c \
+  core/policy.c core/profile.c core/conf.c core/dryrun.c core/log.c \
+  core/policy_reg.c core/launch.c core/tempdir.c vetvdm_paths.c \
+  -lshell32 -luser32 -ladvapi32 -lkernel32
+```
+
+The unit test (command line, NT paths, MZ/NE/LE/LX/PE routing) also builds as a native program. That build does not run the Win32 host.
+
+```
+gcc -std=c99 -Wall -Wextra -Werror -fshort-wchar -DVETVDM_TEST_NATIVE \
+  -I. -Icore -Ivetvdm \
+  -o vetvdm_test \
+  vetvdm_test.c vetvdm/cmdline.c vetvdm/image.c vetvdm/route.c \
+  core/buf.c core/utf8.c core/sha256.c core/quote.c core/json.c \
+  core/policy.c core/profile.c core/conf.c core/dryrun.c core/log.c
+```
 
 ## Rules
 
@@ -93,8 +128,7 @@ i686-w64-mingw32-gcc -std=c99 -Wall -Wextra -Werror -O2 \
 
 ## Left for Build & Kernel
 
-- Add `add_subdirectory(vettv/vetvdm)` from `modules/CMakeLists.txt`.
-- Link the future `vetvdm.exe` against `vetvdm_paths` and decide where that exe is installed. This folder does not copy anything onto the boot CD.
-- The unit test is a host console program (`win32cui`). Do not put it on the ISO.
-- Policy, profile lookup, conf generation, quoting, logging I/O, and the job-object launch described in the vetvdm core plan are not in this change.
-- Keep `_WIN32_WINNT` at `0x0502`. The imports are `kernel32` and `shell32` (`SHGetFolderPathW`, `GetEnvironmentVariableW`, `GetSystemWindowsDirectoryW`, `GetModuleFileNameW`, `CreateDirectoryW`).
+- Add `add_subdirectory(vettv/vetvdm)` from `modules/CMakeLists.txt` and install `vetvdm.exe` at `%SystemRoot%\System32\vetvdm.exe`. This folder does not copy anything onto the boot CD.
+- The unit tests are host console programs (`win32cui`). Do not put them on the ISO.
+- Keep `_WIN32_WINNT` at `0x0502`. `vetvdm.exe` imports `kernel32`, `user32`, `advapi32`, and `shell32`.
+- The hook's recursion guard is the image name `vetvdm.exe`. `VETTV_VDM_BYPASS=1` is set on the child anyway; honoring it (or also skipping `otvdm.exe`) is what stops WineVDM from re-entering the hook.

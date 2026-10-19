@@ -1,18 +1,70 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-# Path-resolution core for vetvdm.exe.
+# vetvdm.exe and its path-resolution library.
 #
 # This directory is intentionally not pulled in by modules/CMakeLists.txt.
 # Wiring it into the top-level ReactOS build (add_subdirectory(vettv/vetvdm))
-# is Build & Kernel's job, once vetvdm.exe is ready to join the boot image.
-# Do not add that call from here, and do not install the unit test on the CD.
+# is Build & Kernel's job. Do not add that call from here, and do not install
+# the unit tests on the CD.
 
 add_library(vetvdm_paths STATIC vetvdm_paths.c)
-target_compile_definitions(vetvdm_paths PRIVATE UNICODE _UNICODE)
+target_compile_definitions(vetvdm_paths PRIVATE
+    UNICODE _UNICODE _WIN32_WINNT=0x0502 WINVER=0x0502)
 target_include_directories(vetvdm_paths PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_library(vetvdm_core STATIC
+    core/buf.c
+    core/utf8.c
+    core/sha256.c
+    core/quote.c
+    core/json.c
+    core/policy.c
+    core/profile.c
+    core/conf.c
+    core/dryrun.c
+    core/log.c)
+target_compile_definitions(vetvdm_core PRIVATE
+    UNICODE _UNICODE _WIN32_WINNT=0x0502 WINVER=0x0502)
+target_include_directories(vetvdm_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/core)
+
+add_executable(vetvdm
+    vetvdm/main.c
+    vetvdm/cmdline.c
+    vetvdm/image.c
+    vetvdm/route.c
+    vetvdm/ask.c
+    vetvdm/image_io.c
+    core/policy_reg.c
+    core/launch.c
+    core/tempdir.c)
+# windows subsystem: Explorer launches must not allocate a console.
+# --help / --dry-run attach to the parent console when one exists.
+set_module_type(vetvdm win32gui UNICODE)
+target_compile_definitions(vetvdm PRIVATE _WIN32_WINNT=0x0502 WINVER=0x0502)
+target_include_directories(vetvdm PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/vetvdm)
+target_link_libraries(vetvdm vetvdm_core vetvdm_paths)
+add_importlibs(vetvdm user32 advapi32 shell32 msvcrt kernel32)
+
+add_executable(vetvdm_test
+    vetvdm_test.c
+    vetvdm/cmdline.c
+    vetvdm/image.c
+    vetvdm/route.c)
+set_module_type(vetvdm_test win32cui UNICODE)
+target_compile_definitions(vetvdm_test PRIVATE _WIN32_WINNT=0x0502 WINVER=0x0502)
+target_include_directories(vetvdm_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/vetvdm)
+target_link_libraries(vetvdm_test vetvdm_core)
+add_importlibs(vetvdm_test msvcrt kernel32)
+# Host-side unit test. No add_cd_file: it does not belong on the boot image.
 
 add_executable(vetvdm_paths_test vetvdm_paths_test.c)
 set_module_type(vetvdm_paths_test win32cui UNICODE)
+target_compile_definitions(vetvdm_paths_test PRIVATE _WIN32_WINNT=0x0502 WINVER=0x0502)
 target_link_libraries(vetvdm_paths_test vetvdm_paths)
 add_importlibs(vetvdm_paths_test shell32 msvcrt kernel32)
 # Host-side unit test. No add_cd_file: it does not belong on the boot image.
